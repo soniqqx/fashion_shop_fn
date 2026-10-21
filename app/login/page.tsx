@@ -36,7 +36,7 @@ export default function LoginPage() {
             saveToken(data.token ?? data.access_token ?? "");
             // Redirect ตาม role
             const role = data.admin?.role ?? data.role ?? "";
-            router.replace(role === "ADMIN" ? "/admin" : "/");
+            router.replace(role === "ADMIN" ? "/" : "/");
         } catch (err: any) {
             setError(err.message ?? "ไม่สามารถเชื่อมต่อ API ได้");
         } finally {

@@ -9,11 +9,16 @@ import { ShoppingBagIcon, UserIcon, Bars3Icon, XMarkIcon } from "@heroicons/reac
 import { useCart } from "../context/CartContext";
 import { getToken, clearToken } from "../lib/auth";
 import { useState } from "react";
-export default function Navbar() {
+
+interface NavbarProps {
+    isLoggedIn: boolean;
+}
+
+export default function Navbar({ isLoggedIn }: NavbarProps) {
     const { cartCount, setCartOpen } = useCart();
     const router = useRouter();
     const [menuOpen, setMenuOpen] = useState(false);
-    const isLoggedIn = typeof window !== "undefined" ? Boolean(getToken()) : false;
+    // isLoggedIn = typeof window !== "undefined" ? Boolean(getToken()) : false;
     function handleLogout() {
         clearToken();
         router.push("/login");

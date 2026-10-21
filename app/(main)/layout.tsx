@@ -6,10 +6,17 @@
 import Navbar from "../../components/Navbar";
 import CartDrawer from "../../components/CartDrawer";
 import type { ReactNode } from "react";
-export default function MainLayout({ children }: { children: ReactNode }) {
+import { cookies } from "next/headers";
+export default async function MainLayout({ children }: { children: ReactNode }) {
+    // 1. อ่าน Cookies ฝั่ง Server
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token'); // เช็กว่ามี Cookie ชื่อ 'token' ไหม
+
+    // 2. แปลงเป็นค่า True/False ว่าล็อกอินอยู่หรือยัง
+    const isLoggedIn = !!token;
     return (
         <>
-            <Navbar />
+            <Navbar isLoggedIn={isLoggedIn} />
             <main>{children}</main>
             <CartDrawer />
         </>
