@@ -1,7 +1,6 @@
 /**
  * context/CartContext.tsx
- * Global cart state — เชื่อมต่อกับ Backend API (/api/cart-item/*)
- * รองรับทั้งผู้ใช้ที่ล็อกอิน (ROLE: USER) และโหมด Guest / Sample Data
+ * Global cart state — เรียกใช้ Backend API (/api/cart-item/*) ด้วย axios โดยตรง
  */
 "use client";
 
@@ -14,6 +13,7 @@ import {
     useState,
     ReactNode,
 } from "react";
+import axios from "axios";
 import { CartItemResponse, CartLine, Product, Variant } from "../lib/types";
 import { getToken } from "../lib/auth";
 
@@ -54,7 +54,10 @@ function mapCartItemToLine(item: CartItemResponse): CartLine {
     };
 }
 
-function translateCartError(message?: string, status?: number): string {
+function translateCartError(err: any): string {
+    const status: number | undefined = err?.response?.status;
+    const message: string | undefined = err?.response?.data?.message ?? err?.message;
+
     if (!message) {
         if (status === 401) return "กรุณาเข้าสู่ระบบก่อนใช้งานตะกร้าสินค้า";
         if (status === 403)
@@ -74,6 +77,34 @@ function translateCartError(message?: string, status?: number): string {
         return "เฉพาะบัญชีผู้ใช้งานทั่วไป (USER) เท่านั้นที่สามารถจัดการตะกร้าสินค้าได้";
     }
     return message;
+}
+
+/** บันทึก local cart ลง localStorage เฉพาะรายการที่เป็น local-* */
+function saveLocalCart(lines: CartLine[]) {
+    if (typeof window === "undefined") return;
+    try {
+        const localLines = lines.filter((l) => l.id.startsWith("local-"));
+        if (localLines.length > 0) {
+            localStorage.setItem(LOCAL_CART_STORAGE_KEY, JSON.stringify(localLines));
+        } else {
+            localStorage.removeItem(LOCAL_CART_STORAGE_KEY);
+        }
+    } catch {
+        // ignore storage errors
+    }
+}
+
+/** อ่าน local cart จาก localStorage */
+function loadLocalCart(): CartLine[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const raw = localStorage.getItem(LOCAL_CART_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
 }
 
 interface CartContextValue {
@@ -108,33 +139,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const clearCartError = useCallback(() => setCartError(null), []);
 
-    // บันทึก local cart ลง localStorage เฉพาะรายการที่เป็น local-*
-    const saveLocalCart = useCallback((lines: CartLine[]) => {
-        if (typeof window === "undefined") return;
-        try {
-            const localLines = lines.filter((l) => l.id.startsWith("local-"));
-            if (localLines.length > 0) {
-                localStorage.setItem(LOCAL_CART_STORAGE_KEY, JSON.stringify(localLines));
-            } else {
-                localStorage.removeItem(LOCAL_CART_STORAGE_KEY);
-            }
-        } catch {
-            // ignore storage errors
-        }
-    }, []);
-
-    const loadLocalCart = useCallback((): CartLine[] => {
-        if (typeof window === "undefined") return [];
-        try {
-            const raw = localStorage.getItem(LOCAL_CART_STORAGE_KEY);
-            if (!raw) return [];
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    }, []);
-
     /**
      * GET /api/cart-item/find-all
      * ดึงรายการสินค้าในตะกร้าของ User ปัจจุบันจาก Backend
@@ -154,13 +158,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (pendingLocal.length > 0) {
                 await Promise.allSettled(
                     pendingLocal.map((line) =>
-                        fetch("/api/cart-item/create", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                variantId: line.variant.id,
-                                quantity: line.quantity,
-                            }),
+                        axios.post("/api/cart-item/create", {
+                            variantId: line.variant.id,
+                            quantity: line.quantity,
                         })
                     )
                 );
@@ -169,34 +169,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 }
             }
 
-            const res = await fetch("/api/cart-item/find-all", {
-                method: "GET",
-                cache: "no-store",
-            });
-
-            if (res.ok) {
-                const data = (await res.json()) as CartItemResponse[];
-                const mapped = Array.isArray(data) ? data.map(mapCartItemToLine) : [];
-                setCart(mapped);
-                setIsSyncedWithBackend(true);
-                setCartError(null);
-            } else {
-                // กรณี 401/403 (เช่น ล็อกอินด้วย ADMIN หรือ token หมดอายุ)
-                setIsSyncedWithBackend(false);
-                if (res.status === 403) {
-                    setCartError(
-                        "บัญชีผู้ดูแลระบบ (ADMIN) ไม่สามารถใช้งานตะกร้าฝั่งลูกค้าได้ กรุณาเข้าสู่ระบบด้วยบัญชี USER"
-                    );
-                }
-                setCart(loadLocalCart());
-            }
-        } catch {
+            const { data } = await axios.get<CartItemResponse[]>("/api/cart-item/find-all");
+            const mapped = Array.isArray(data) ? data.map(mapCartItemToLine) : [];
+            setCart(mapped);
+            setIsSyncedWithBackend(true);
+            setCartError(null);
+        } catch (err: any) {
             setIsSyncedWithBackend(false);
+            if (err?.response?.status === 403) {
+                setCartError(
+                    "บัญชีผู้ดูแลระบบ (ADMIN) ไม่สามารถใช้งานตะกร้าฝั่งลูกค้าได้ กรุณาเข้าสู่ระบบด้วยบัญชี USER"
+                );
+            }
             setCart(loadLocalCart());
         } finally {
             setCartLoading(false);
         }
-    }, [loadLocalCart]);
+    }, []);
 
     useEffect(() => {
         void refreshCart();
@@ -210,18 +199,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         async (itemId: string): Promise<CartItemResponse | null> => {
             if (!getToken() || !isUuid(itemId)) return null;
             try {
-                const res = await fetch(`/api/cart-item/find-by-id/${itemId}`, {
-                    method: "GET",
-                    cache: "no-store",
-                });
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    setCartError(translateCartError(errData.message, res.status));
-                    return null;
-                }
-                return (await res.json()) as CartItemResponse;
-            } catch {
-                setCartError("ไม่สามารถดึงรายละเอียดสินค้าในตะกร้าได้");
+                const { data } = await axios.get<CartItemResponse>(
+                    `/api/cart-item/find-by-id/${itemId}`
+                );
+                return data;
+            } catch (err: any) {
+                setCartError(translateCartError(err));
                 return null;
             }
         },
@@ -247,26 +230,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (token && isUuid(variant.id)) {
                 setUpdatingItemId(variant.id);
                 try {
-                    const res = await fetch("/api/cart-item/create", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            variantId: variant.id,
-                            quantity,
-                        }),
+                    await axios.post("/api/cart-item/create", {
+                        variantId: variant.id,
+                        quantity,
                     });
-
-                    if (!res.ok) {
-                        const errData = await res.json().catch(() => ({}));
-                        setCartError(translateCartError(errData.message, res.status));
-                        return false;
-                    }
-
                     await refreshCart();
                     setCartOpen(true);
                     return true;
-                } catch {
-                    setCartError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อเพิ่มสินค้าลงตะกร้าได้");
+                } catch (err: any) {
+                    setCartError(translateCartError(err));
                     return false;
                 } finally {
                     setUpdatingItemId(null);
@@ -276,80 +248,65 @@ export function CartProvider({ children }: { children: ReactNode }) {
             // กรณี Guest หรือใช้ Sample Data (ยังไม่ได้ล็อกอิน)
             setCart((prev) => {
                 const existing = prev.find((line) => line.variant.id === variant.id);
-                let next: CartLine[];
-                if (existing) {
-                    next = prev.map((line) =>
-                        line.variant.id === variant.id
-                            ? { ...line, quantity: line.quantity + quantity }
-                            : line
-                    );
-                } else {
-                    next = [
-                        ...prev,
-                        {
-                            id: `local-${variant.id}`,
-                            variantId: variant.id,
-                            variant,
-                            product: {
-                                name: product.name,
-                                description: product.description ?? null,
-                                isActive: product.isActive ?? true,
-                            },
-                            quantity,
-                        },
-                    ];
-                }
+                const next = existing
+                    ? prev.map((line) =>
+                          line.variant.id === variant.id
+                              ? { ...line, quantity: line.quantity + quantity }
+                              : line
+                      )
+                    : [
+                          ...prev,
+                          {
+                              id: `local-${variant.id}`,
+                              variantId: variant.id,
+                              variant,
+                              product: {
+                                  name: product.name,
+                                  description: product.description ?? null,
+                                  isActive: product.isActive ?? true,
+                              },
+                              quantity,
+                          },
+                      ];
                 saveLocalCart(next);
                 return next;
             });
             setCartOpen(true);
             return true;
         },
-        [refreshCart, saveLocalCart]
+        [refreshCart]
     );
 
     /**
      * DELETE /api/cart-item/delete/:itemId
      * ลบรายการสินค้าออกจากตะกร้า
      */
-    const removeItem = useCallback(
-        async (itemId: string): Promise<boolean> => {
-            setCartError(null);
-            const token = getToken();
+    const removeItem = useCallback(async (itemId: string): Promise<boolean> => {
+        setCartError(null);
+        const token = getToken();
 
-            if (token && isUuid(itemId)) {
-                setUpdatingItemId(itemId);
-                try {
-                    const res = await fetch(`/api/cart-item/delete/${itemId}`, {
-                        method: "DELETE",
-                    });
-
-                    if (!res.ok) {
-                        const errData = await res.json().catch(() => ({}));
-                        setCartError(translateCartError(errData.message, res.status));
-                        return false;
-                    }
-
-                    setCart((prev) => prev.filter((line) => line.id !== itemId));
-                    return true;
-                } catch {
-                    setCartError("ไม่สามารถลบรายการสินค้าออกจากตะกร้าได้");
-                    return false;
-                } finally {
-                    setUpdatingItemId(null);
-                }
+        if (token && isUuid(itemId)) {
+            setUpdatingItemId(itemId);
+            try {
+                await axios.delete(`/api/cart-item/delete/${itemId}`);
+                setCart((prev) => prev.filter((line) => line.id !== itemId));
+                return true;
+            } catch (err: any) {
+                setCartError(translateCartError(err));
+                return false;
+            } finally {
+                setUpdatingItemId(null);
             }
+        }
 
-            // กรณี Local item
-            setCart((prev) => {
-                const next = prev.filter((line) => line.id !== itemId);
-                saveLocalCart(next);
-                return next;
-            });
-            return true;
-        },
-        [saveLocalCart]
-    );
+        // กรณี Local item
+        setCart((prev) => {
+            const next = prev.filter((line) => line.id !== itemId);
+            saveLocalCart(next);
+            return next;
+        });
+        return true;
+    }, []);
 
     /**
      * PUT /api/cart-item/update/:itemId
@@ -367,26 +324,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (token && isUuid(itemId)) {
                 setUpdatingItemId(itemId);
                 try {
-                    const res = await fetch(`/api/cart-item/update/${itemId}`, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ quantity: newQty }),
+                    await axios.put(`/api/cart-item/update/${itemId}`, {
+                        quantity: newQty,
                     });
-
-                    if (!res.ok) {
-                        const errData = await res.json().catch(() => ({}));
-                        setCartError(translateCartError(errData.message, res.status));
-                        return false;
-                    }
-
                     setCart((prev) =>
                         prev.map((line) =>
                             line.id === itemId ? { ...line, quantity: newQty } : line
                         )
                     );
                     return true;
-                } catch {
-                    setCartError("ไม่สามารถอัปเดตจำนวนสินค้าได้ กรุณาลองใหม่อีกครั้ง");
+                } catch (err: any) {
+                    setCartError(translateCartError(err));
                     return false;
                 } finally {
                     setUpdatingItemId(null);
@@ -403,7 +351,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             });
             return true;
         },
-        [removeItem, saveLocalCart]
+        [removeItem]
     );
 
     /**
@@ -413,8 +361,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         async (itemId: string, delta: number): Promise<boolean> => {
             const target = cart.find((line) => line.id === itemId);
             if (!target) return false;
-            const newQty = target.quantity + delta;
-            return setItemQuantity(itemId, newQty);
+            return setItemQuantity(itemId, target.quantity + delta);
         },
         [cart, setItemQuantity]
     );
@@ -432,9 +379,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             try {
                 await Promise.allSettled(
                     backendItems.map((line) =>
-                        fetch(`/api/cart-item/delete/${line.id}`, {
-                            method: "DELETE",
-                        })
+                        axios.delete(`/api/cart-item/delete/${line.id}`)
                     )
                 );
             } finally {
@@ -444,7 +389,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         setCart([]);
         saveLocalCart([]);
-    }, [cart, saveLocalCart]);
+    }, [cart]);
 
     const cartCount = useMemo(
         () => cart.reduce((sum, line) => sum + line.quantity, 0),

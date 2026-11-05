@@ -1,10 +1,11 @@
 /**
  * app/(main)/products/page.tsx
- * หน้ารายการสินค้าทั้งหมด — ดึงข้อมูล Product, Variant และ Category จาก Backend
+ * หน้ารายการสินค้าทั้งหมด — ดึงข้อมูล Product, Variant และ Category จาก Backend ด้วย axios
  */
 "use client";
 
 import { useEffect, useState } from "react";
+import axios from "axios";
 import ProductGrid from "../../../components/ProductGrid";
 import { Product, Category, Variant } from "../../../lib/types";
 
@@ -72,18 +73,25 @@ export default function ProductsPage() {
     useEffect(() => {
         async function load() {
             try {
-                const [pr, cr] = await Promise.all([
-                    fetch("/api/product/find-all"),
-                    fetch("/api/category/find-all"),
-                ]);
-                if (!pr.ok || !cr.ok) throw new Error("API ยังไม่พร้อม");
-                const liveProducts = (await pr.json()) as Product[];
-                const liveCategories = (await cr.json()) as Category[];
+                const [{ data: liveProducts }, { data: liveCategories }, { data: liveVariants }] =
+                    await Promise.all([
+                        axios.get<Product[]>("/api/product/find-all"),
+                        axios.get<Category[]>("/api/category/find-all"),
+                        axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
+                    ]);
 
-                setProducts(liveProducts);
+                const mergedProducts = liveProducts.map((prod) => ({
+                    ...prod,
+                    variants:
+                        prod.variants && prod.variants.length > 0
+                            ? prod.variants
+                            : liveVariants.filter((v) => v.productId === prod.id),
+                }));
+
+                setProducts(mergedProducts);
                 setCategories(liveCategories);
                 setStatus(
-                    `โหลดสินค้าจาก backend แล้ว (${liveProducts.length} รายการ)`
+                    `โหลดสินค้าจาก backend แล้ว (${mergedProducts.length} รายการ)`
                 );
             } catch {
                 setStatus("แสดงข้อมูลตัวอย่าง — backend ยังไม่ได้เชื่อมต่อ");

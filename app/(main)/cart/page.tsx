@@ -1,8 +1,13 @@
+/**
+ * app/(main)/cart/page.tsx
+ * หน้าตะกร้าสินค้าฝั่ง User — เรียกใช้ Backend API ของ w_project_bn ด้วย axios โดยตรง
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import {
     ArrowPathIcon,
     ArrowRightIcon,
@@ -100,7 +105,6 @@ export default function CartPage() {
                 .map((line) => line.id);
             if (prev.length === 0) return validIds;
             const filtered = prev.filter((id) => validIds.includes(id));
-            // หากเพิ่งเพิ่มสินค้าใหม่ ให้เลือกอัตโนมัติถ้าเดิมเลือกทั้งหมดไว้
             return filtered.length > 0 ? filtered : validIds;
         });
     }, [cart]);
@@ -109,13 +113,10 @@ export default function CartPage() {
     useEffect(() => {
         if (stage !== "address") return;
         async function fetchAddresses() {
-            const token = getToken();
-            if (!token) return;
+            if (!getToken()) return;
             setAddressLoading(true);
             try {
-                const res = await fetch("/api/address/find-all", { cache: "no-store" });
-                if (!res.ok) return;
-                const data = (await res.json()) as Address[];
+                const { data } = await axios.get<Address[]>("/api/address/find-all");
                 const activeList = (Array.isArray(data) ? data : []).filter(
                     (a) => a.isActive !== false
                 );
@@ -217,8 +218,7 @@ export default function CartPage() {
             setError("กรุณาเลือกสินค้าอย่างน้อย 1 รายการเพื่อดำเนินการสั่งซื้อ");
             return;
         }
-        const token = getToken();
-        if (!token) {
+        if (!getToken()) {
             setError("กรุณาเข้าสู่ระบบด้วยบัญชีผู้ใช้งาน (USER) ก่อนดำเนินการสั่งซื้อ");
             return;
         }
@@ -250,8 +250,7 @@ export default function CartPage() {
 
     // ---- ขั้นตอน Checkout (POST /api/address/create + POST /api/checkout) ----
     async function handleCheckout() {
-        const token = getToken();
-        if (!token) {
+        if (!getToken()) {
             setError("กรุณาเข้าสู่ระบบก่อนดำเนินการชำระเงิน");
             return;
         }
@@ -276,25 +275,15 @@ export default function CartPage() {
                     return;
                 }
 
-                const addrRes = await fetch("/api/address/create", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        recipientName: newAddress.recipientName.trim(),
-                        phone: newAddress.phone.trim(),
-                        addressLine: newAddress.addressLine.trim(),
-                        district: newAddress.district.trim(),
-                        province: newAddress.province.trim(),
-                        postalCode: newAddress.postalCode.trim(),
-                    }),
+                const { data: addrData } = await axios.post<Address>("/api/address/create", {
+                    recipientName: newAddress.recipientName.trim(),
+                    phone: newAddress.phone.trim(),
+                    addressLine: newAddress.addressLine.trim(),
+                    district: newAddress.district.trim(),
+                    province: newAddress.province.trim(),
+                    postalCode: newAddress.postalCode.trim(),
                 });
 
-                const addrData = await addrRes.json().catch(() => ({}));
-                if (!addrRes.ok) {
-                    throw new Error(
-                        addrData.message ?? "ไม่สามารถบันทึกข้อมูลที่อยู่จัดส่งได้"
-                    );
-                }
                 addressIdToUse = addrData.id;
                 setAddresses((prev) => [addrData, ...prev]);
                 setSelectedAddressId(addrData.id);
@@ -312,45 +301,25 @@ export default function CartPage() {
             }
 
             // 3. เรียก POST /api/checkout
-            const res = await fetch("/api/checkout", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    cartItemId: checkoutItemIds,
-                    addressId: addressIdToUse,
-                    shippingMethod,
-                }),
+            const { data } = await axios.post<CheckoutResponse>("/api/checkout", {
+                cartItemId: checkoutItemIds,
+                addressId: addressIdToUse,
+                shippingMethod,
             });
 
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (
-                    typeof data.message === "string" &&
-                    data.message.toLowerCase().includes("address not found")
-                ) {
-                    // หากที่อยู่ที่เลือกไม่ใช่ของ User ปัจจุบัน ให้สลับไปหน้าสร้างที่อยู่ใหม่
-                    setAddressMode("create");
-                    throw new Error(
-                        "ที่อยู่ที่เลือกไม่ตรงกับบัญชีของคุณ กรุณากรอกที่อยู่จัดส่งใหม่"
-                    );
-                }
-                if (
-                    typeof data.message === "string" &&
-                    data.message.toLowerCase().includes("insufficient stock")
-                ) {
-                    throw new Error(
-                        `สต็อกสินค้าไม่เพียงพอ (${data.message}) กรุณาปรับลดจำนวนสินค้าในตะกร้า`
-                    );
-                }
-                throw new Error(data.message ?? "ไม่สามารถสร้างคำสั่งซื้อได้");
-            }
-
-            setCheckoutResult(data as CheckoutResponse);
-            // อัปเดตตะกร้าหลังจาก Backend ลบรายการที่ Checkout ออกไปแล้ว
+            setCheckoutResult(data);
             await refreshCart();
             setStage("payment");
         } catch (err: any) {
-            setError(err.message ?? "เกิดข้อผิดพลาดในการสั่งซื้อ");
+            const backendMsg: string | undefined = err?.response?.data?.message ?? err?.message;
+            if (backendMsg && backendMsg.toLowerCase().includes("address not found")) {
+                setAddressMode("create");
+                setError("ที่อยู่ที่เลือกไม่ตรงกับบัญชีของคุณ กรุณากรอกที่อยู่จัดส่งใหม่");
+            } else if (backendMsg && backendMsg.toLowerCase().includes("insufficient stock")) {
+                setError(`สต็อกสินค้าไม่เพียงพอ (${backendMsg}) กรุณาปรับลดจำนวนสินค้าในตะกร้า`);
+            } else {
+                setError(backendMsg ?? "เกิดข้อผิดพลาดในการสั่งซื้อ");
+            }
         } finally {
             setLoading(false);
         }
@@ -362,20 +331,11 @@ export default function CartPage() {
         setError("");
         setLoading(true);
         try {
-            const res = await fetch(`/api/payment/${checkoutResult.payment.id}/pay`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    orderId: checkoutResult.order.id,
-                }),
-            });
+            const { data: paymentRes } = await axios.patch<Payment>(
+                `/api/payment/${checkoutResult.payment.id}/pay`,
+                { orderId: checkoutResult.order.id }
+            );
 
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                throw new Error(data.message ?? "ไม่สามารถยืนยันการชำระเงินได้");
-            }
-
-            const paymentRes = data as Payment;
             setPaidResult(paymentRes);
 
             if (paymentRes.status === "EXPIRED") {
@@ -385,7 +345,7 @@ export default function CartPage() {
 
             setStage("done");
         } catch (err: any) {
-            setError(err.message ?? "เกิดข้อผิดพลาดในการชำระเงิน");
+            setError(err?.response?.data?.message ?? err?.message ?? "เกิดข้อผิดพลาดในการชำระเงิน");
         } finally {
             setLoading(false);
         }
@@ -484,9 +444,9 @@ export default function CartPage() {
         const { order, payment } = checkoutResult;
         const expiresText = order.expiresAt
             ? new Date(order.expiresAt).toLocaleTimeString("th-TH", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-              })
+                hour: "2-digit",
+                minute: "2-digit",
+            })
             : "15 นาที";
 
         return (
@@ -593,8 +553,16 @@ export default function CartPage() {
                 <div className="checkout-wrap">
                     <p className="intro">CHECKOUT / 01 · SHIPPING & ADDRESS</p>
                     <h1>ข้อมูลสำหรับจัดส่ง</h1>
-
-                    {/* เลือกระหว่างที่อยู่เดิม หรือเพิ่มที่อยู่ใหม่ */}
+                    <button
+                        className="text-button"
+                        style={{ marginTop: 14, fontSize: 12 }}
+                        onClick={() => {
+                            setError("");
+                            setStage("cart");
+                        }}
+                    >
+                        ← ย้อนกลับสู่ตะกร้าสินค้า
+                    </button>
                     {addresses.length > 0 && (
                         <div className="address-tabs">
                             <button
@@ -621,9 +589,8 @@ export default function CartPage() {
                             {addresses.map((addr) => (
                                 <label
                                     key={addr.id}
-                                    className={`saved-address-card ${
-                                        selectedAddressId === addr.id ? "selected" : ""
-                                    }`}
+                                    className={`saved-address-card ${selectedAddressId === addr.id ? "selected" : ""
+                                        }`}
                                 >
                                     <input
                                         type="radio"
@@ -701,9 +668,8 @@ export default function CartPage() {
                             รูปแบบการจัดส่ง (SHIPPING METHOD)
                         </p>
                         <label
-                            className={`shipping-option ${
-                                shippingMethod === "STANDARD" ? "selected" : ""
-                            }`}
+                            className={`shipping-option ${shippingMethod === "STANDARD" ? "selected" : ""
+                                }`}
                         >
                             <input
                                 type="radio"
@@ -723,9 +689,8 @@ export default function CartPage() {
                         </label>
 
                         <label
-                            className={`shipping-option ${
-                                shippingMethod === "EXPRESS" ? "selected" : ""
-                            }`}
+                            className={`shipping-option ${shippingMethod === "EXPRESS" ? "selected" : ""
+                                }`}
                         >
                             <input
                                 type="radio"
@@ -811,8 +776,8 @@ export default function CartPage() {
                     {isSyncedWithBackend
                         ? "เชื่อมต่อข้อมูลตะกร้าสินค้ากับ Backend API (/api/cart-item) แล้ว"
                         : getToken()
-                        ? "โหมดตะกร้าสินค้า (กำลังซิงค์ข้อมูลกับเซิร์ฟเวอร์)"
-                        : "โหมดผู้เยี่ยมชม (Guest) — กรุณาเข้าสู่ระบบด้วยบัญชี USER เพื่อซิงค์ตะกร้าและสั่งซื้อจริง"}
+                            ? "โหมดตะกร้าสินค้า (กำลังซิงค์ข้อมูลกับเซิร์ฟเวอร์)"
+                            : "โหมดผู้เยี่ยมชม (Guest) — กรุณาเข้าสู่ระบบด้วยบัญชี USER เพื่อซิงค์ตะกร้าและสั่งซื้อจริง"}
                 </div>
                 <button
                     type="button"
@@ -890,9 +855,8 @@ export default function CartPage() {
 
                                 return (
                                     <div
-                                        className={`cart-line-full ${
-                                            isSelected ? "is-selected" : ""
-                                        } ${isUnavailable ? "is-unavailable" : ""}`}
+                                        className={`cart-line-full ${isSelected ? "is-selected" : ""
+                                            } ${isUnavailable ? "is-unavailable" : ""}`}
                                         key={line.id}
                                     >
                                         {/* Checkbox เลือกรายการสำหรับ Checkout */}
@@ -1061,7 +1025,7 @@ export default function CartPage() {
                                 <span>STANDARD (2–4 วัน)</span>
                                 <strong>
                                     {selectedSubtotal >= FREE_SHIPPING_THRESHOLD &&
-                                    selectedSubtotal > 0
+                                        selectedSubtotal > 0
                                         ? "ฟรี"
                                         : "฿40"}
                                 </strong>
@@ -1093,8 +1057,8 @@ export default function CartPage() {
                                 {selectedSubtotal === 0
                                     ? "฿0"
                                     : shippingFee === 0
-                                    ? "ฟรี (฿0)"
-                                    : money(shippingFee)}
+                                        ? "ฟรี (฿0)"
+                                        : money(shippingFee)}
                             </span>
                         </div>
                         <div className="summary-divider" />

@@ -1,15 +1,14 @@
 /**
  * app/(main)/page.tsx — หน้าแรก (store front)
- * โหลด Product, Variant และ Category จาก Backend API
+ * โหลด Product, Variant และ Category จาก Backend API ด้วย axios
  */
 "use client";
 
 import { useEffect, useState } from "react";
+import axios from "axios";
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import ProductGrid from "../../components/ProductGrid";
 import { Product, Category, Variant } from "../../lib/types";
-
-const API = "/api"; // ผ่าน reverse proxy เสมอ
 
 const sampleProducts: Product[] = [
     {
@@ -83,15 +82,22 @@ export default function Home() {
     useEffect(() => {
         async function loadCatalog() {
             try {
-                const [pRes, cRes] = await Promise.all([
-                    fetch(`${API}/product/find-all`),
-                    fetch(`${API}/category/find-all`)
-                ]);
-                if (!pRes.ok || !cRes.ok) throw new Error();
-                const rawProducts = (await pRes.json()) as Product[];
-                const rawCategories = (await cRes.json()) as Category[];
+                const [{ data: rawProducts }, { data: rawCategories }, { data: rawVariants }] =
+                    await Promise.all([
+                        axios.get<Product[]>("/api/product/find-all"),
+                        axios.get<Category[]>("/api/category/find-all"),
+                        axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
+                    ]);
 
-                setProducts(rawProducts);
+                const mergedProducts = rawProducts.map((prod) => ({
+                    ...prod,
+                    variants:
+                        prod.variants && prod.variants.length > 0
+                            ? prod.variants
+                            : rawVariants.filter((v) => v.productId === prod.id),
+                }));
+
+                setProducts(mergedProducts);
                 setCategories(rawCategories);
                 setNotice("เชื่อมต่อ catalog จาก backend แล้ว");
             } catch {

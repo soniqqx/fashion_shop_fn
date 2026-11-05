@@ -1,12 +1,13 @@
 /**
  * app/login/page.tsx
- * หน้าเข้าสู่ระบบ — full-page design สำหรับร้านเสื้อผ้า atelier
+ * หน้าเข้าสู่ระบบ — เรียก API ด้วย axios
  */
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import axios from "axios";
 import { ArrowRightIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { saveToken, getToken } from "../../lib/auth";
 import { useCart } from "../../context/CartContext";
@@ -29,15 +30,10 @@ export default function LoginPage() {
         setError("");
         setLoading(true);
         try {
-            const res = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: form.email, password: form.password }),
+            const { data } = await axios.post("/api/auth/login", {
+                email: form.email,
+                password: form.password,
             });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.message ?? "เข้าสู่ระบบไม่สำเร็จ");
-            }
             // บันทึก token ลง cookie
             saveToken(data.token ?? data.access_token ?? "");
             // ซิงค์ตะกร้าสินค้าของ User ทันทีหลังล็อกอิน
@@ -46,7 +42,11 @@ export default function LoginPage() {
             router.replace(role === "ADMIN" ? "/" : "/");
             router.refresh();
         } catch (err: any) {
-            setError(err.message ?? "ไม่สามารถเชื่อมต่อ API ได้");
+            setError(
+                err?.response?.data?.message ??
+                    err?.message ??
+                    "เข้าสู่ระบบไม่สำเร็จ"
+            );
         } finally {
             setLoading(false);
         }
