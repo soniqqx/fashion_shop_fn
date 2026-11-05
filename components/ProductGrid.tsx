@@ -23,6 +23,7 @@ export default function ProductGrid({ products, categories }: ProductGridProps) 
             ),
         [products, activeCategory]
     );
+
     return (
         <section id="catalog" className="catalog">
             {/* Section heading */}

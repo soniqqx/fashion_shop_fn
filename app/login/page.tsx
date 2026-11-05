@@ -3,21 +3,27 @@
  * หน้าเข้าสู่ระบบ — full-page design สำหรับร้านเสื้อผ้า atelier
  */
 "use client";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRightIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { saveToken, getToken } from "../../lib/auth";
+import { useCart } from "../../context/CartContext";
+
 export default function LoginPage() {
     const router = useRouter();
+    const { refreshCart } = useCart();
     const [form, setForm] = useState({ email: "", password: "" });
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+
     // Redirect ถ้า login แล้ว
     useEffect(() => {
         if (getToken()) router.replace("/");
     }, [router]);
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setError("");
@@ -32,17 +38,20 @@ export default function LoginPage() {
             if (!res.ok) {
                 throw new Error(data.message ?? "เข้าสู่ระบบไม่สำเร็จ");
             }
-            // บันทึก token ลง localStorage + cookie
+            // บันทึก token ลง cookie
             saveToken(data.token ?? data.access_token ?? "");
-            // Redirect ตาม role
+            // ซิงค์ตะกร้าสินค้าของ User ทันทีหลังล็อกอิน
+            await refreshCart();
             const role = data.admin?.role ?? data.role ?? "";
             router.replace(role === "ADMIN" ? "/" : "/");
+            router.refresh();
         } catch (err: any) {
             setError(err.message ?? "ไม่สามารถเชื่อมต่อ API ได้");
         } finally {
             setLoading(false);
         }
     }
+
     return (
         <div className="login-page">
             {/* Left panel — brand */}
@@ -53,11 +62,13 @@ export default function LoginPage() {
                 <div className="login-hero-text">
                     <p className="login-tagline">MEMBER ACCESS</p>
                     <h1>
-                        Welcome<br />
+                        Welcome
+                        <br />
                         back.
                     </h1>
                     <p className="login-sub">
-                        สมาชิก atelier จัดการออเดอร์<br />
+                        สมาชิก atelier จัดการออเดอร์
+                        <br />
                         ติดตามการจัดส่ง และดูสิทธิพิเศษได้ที่นี่
                     </p>
                 </div>
@@ -79,7 +90,12 @@ export default function LoginPage() {
                             สมัครสมาชิก
                         </Link>
                     </p>
-                    <form id="login-form" className="login-form" onSubmit={handleSubmit} noValidate>
+                    <form
+                        id="login-form"
+                        className="login-form"
+                        onSubmit={handleSubmit}
+                        noValidate
+                    >
                         {/* Email */}
                         <div className="field-group">
                             <label htmlFor="login-email" className="field-label">
@@ -91,7 +107,9 @@ export default function LoginPage() {
                                 autoComplete="email"
                                 placeholder="your@email.com"
                                 value={form.email}
-                                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                onChange={(e) =>
+                                    setForm({ ...form, email: e.target.value })
+                                }
                                 required
                                 className="login-input"
                             />
@@ -108,7 +126,9 @@ export default function LoginPage() {
                                     autoComplete="current-password"
                                     placeholder="••••••••"
                                     value={form.password}
-                                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                    onChange={(e) =>
+                                        setForm({ ...form, password: e.target.value })
+                                    }
                                     required
                                     className="login-input"
                                 />
@@ -116,7 +136,9 @@ export default function LoginPage() {
                                     type="button"
                                     className="eye-btn"
                                     onClick={() => setShowPassword((v) => !v)}
-                                    aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                                    aria-label={
+                                        showPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"
+                                    }
                                 >
                                     {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
                                 </button>
@@ -138,11 +160,20 @@ export default function LoginPage() {
                             className="solid-button full login-submit"
                             disabled={loading}
                         >
-                            {loading ? "กำลังเข้าสู่ระบบ…" : <>เข้าสู่ระบบ <ArrowRightIcon /></>}
+                            {loading ? (
+                                "กำลังเข้าสู่ระบบ…"
+                            ) : (
+                                <>
+                                    เข้าสู่ระบบ <ArrowRightIcon />
+                                </>
+                            )}
                         </button>
                     </form>
                     <p className="login-hint">
-                        ✦ บัญชีทดสอบ: <code>admin@example.com</code> / <code>123456</code>
+                        ✦ บัญชีลูกค้า (User Cart): <code>user@example.com</code> /{" "}
+                        <code>123456</code>
+                        <br />✦ บัญชีผู้ดูแล (Admin): <code>admin@example.com</code> /{" "}
+                        <code>123456</code>
                     </p>
                 </div>
                 {/* Back link */}

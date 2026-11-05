@@ -3,11 +3,12 @@
  * แถบนำทางหลักของร้าน
  */
 "use client";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShoppingBagIcon, UserIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ShoppingBagIcon, Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCart } from "../context/CartContext";
-import { getToken, clearToken } from "../lib/auth";
+import { clearToken } from "../lib/auth";
 import { useState } from "react";
 
 interface NavbarProps {
@@ -15,14 +16,17 @@ interface NavbarProps {
 }
 
 export default function Navbar({ isLoggedIn }: NavbarProps) {
-    const { cartCount, setCartOpen } = useCart();
+    const { cartCount, setCartOpen, refreshCart } = useCart();
     const router = useRouter();
     const [menuOpen, setMenuOpen] = useState(false);
-    // isLoggedIn = typeof window !== "undefined" ? Boolean(getToken()) : false;
-    function handleLogout() {
+
+    async function handleLogout() {
         clearToken();
+        await refreshCart();
         router.push("/login");
+        router.refresh();
     }
+
     return (
         <header className="topbar">
             {/* Wordmark */}
@@ -38,7 +42,7 @@ export default function Navbar({ isLoggedIn }: NavbarProps) {
             {/* Actions */}
             <div className="header-actions">
                 {isLoggedIn ? (
-                    <button className="text-button" onClick={handleLogout}>
+                    <button className="text-button" onClick={() => void handleLogout()}>
                         ออกจากระบบ
                     </button>
                 ) : (
@@ -68,13 +72,28 @@ export default function Navbar({ isLoggedIn }: NavbarProps) {
             {/* Mobile menu */}
             {menuOpen && (
                 <nav className="mobile-nav">
-                    <Link href="/" onClick={() => setMenuOpen(false)}>หน้าร้าน</Link>
-                    <Link href="/products" onClick={() => setMenuOpen(false)}>สินค้าทั้งหมด</Link>
-                    <Link href="/cart" onClick={() => setMenuOpen(false)}>ตะกร้าสินค้า</Link>
+                    <Link href="/" onClick={() => setMenuOpen(false)}>
+                        หน้าร้าน
+                    </Link>
+                    <Link href="/products" onClick={() => setMenuOpen(false)}>
+                        สินค้าทั้งหมด
+                    </Link>
+                    <Link href="/cart" onClick={() => setMenuOpen(false)}>
+                        ตะกร้าสินค้า
+                    </Link>
                     {isLoggedIn ? (
-                        <button onClick={() => { handleLogout(); setMenuOpen(false); }}>ออกจากระบบ</button>
+                        <button
+                            onClick={() => {
+                                void handleLogout();
+                                setMenuOpen(false);
+                            }}
+                        >
+                            ออกจากระบบ
+                        </button>
                     ) : (
-                        <Link href="/login" onClick={() => setMenuOpen(false)}>เข้าสู่ระบบ</Link>
+                        <Link href="/login" onClick={() => setMenuOpen(false)}>
+                            เข้าสู่ระบบ
+                        </Link>
                     )}
                 </nav>
             )}

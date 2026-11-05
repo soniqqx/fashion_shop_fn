@@ -1,12 +1,13 @@
 /**
  * app/(main)/products/page.tsx
- * หน้ารายการสินค้าทั้งหมด
+ * หน้ารายการสินค้าทั้งหมด — ดึงข้อมูล Product, Variant และ Category จาก Backend
  */
 "use client";
+
 import { useEffect, useState } from "react";
 import ProductGrid from "../../../components/ProductGrid";
-import CartDrawer from "../../../components/CartDrawer";
-import { Product, Category } from "../../../lib/types";
+import { Product, Category, Variant } from "../../../lib/types";
+
 const SAMPLE_PRODUCTS: Product[] = [
     {
         id: "tee",
@@ -54,6 +55,7 @@ const SAMPLE_PRODUCTS: Product[] = [
         variants: [{ id: "cap-black", price: 290, color: "Black", size: "One Size" }],
     },
 ];
+
 const SAMPLE_CATEGORIES: Category[] = [
     { id: "t-shirt", nameTh: "เสื้อยืด", nameEn: "T-Shirt", isActive: true },
     { id: "shirt", nameTh: "เสื้อเชิ้ต", nameEn: "Shirt", isActive: true },
@@ -61,10 +63,12 @@ const SAMPLE_CATEGORIES: Category[] = [
     { id: "pants", nameTh: "กางเกง", nameEn: "Pants", isActive: true },
     { id: "accessories", nameTh: "แอคเซสเซอรี่", nameEn: "Accessories", isActive: true },
 ];
+
 export default function ProductsPage() {
     const [products, setProducts] = useState<Product[]>(SAMPLE_PRODUCTS);
     const [categories, setCategories] = useState<Category[]>(SAMPLE_CATEGORIES);
     const [status, setStatus] = useState("กำลังโหลดสินค้า…");
+
     useEffect(() => {
         async function load() {
             try {
@@ -75,15 +79,19 @@ export default function ProductsPage() {
                 if (!pr.ok || !cr.ok) throw new Error("API ยังไม่พร้อม");
                 const liveProducts = (await pr.json()) as Product[];
                 const liveCategories = (await cr.json()) as Category[];
+
                 setProducts(liveProducts);
                 setCategories(liveCategories);
-                setStatus(`โหลดสินค้าจาก backend แล้ว (${liveProducts.length} รายการ)`);
+                setStatus(
+                    `โหลดสินค้าจาก backend แล้ว (${liveProducts.length} รายการ)`
+                );
             } catch {
                 setStatus("แสดงข้อมูลตัวอย่าง — backend ยังไม่ได้เชื่อมต่อ");
             }
         }
         void load();
     }, []);
+
     return (
         <>
             {/* Status bar */}
@@ -101,8 +109,6 @@ export default function ProductsPage() {
             </section>
             {/* Product grid + filter */}
             <ProductGrid products={products} categories={categories} />
-            {/* Cart drawer */}
-            <CartDrawer />
         </>
     );
 }
