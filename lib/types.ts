@@ -12,6 +12,9 @@ export type Variant = {
     isActive?: boolean;
     createdAt?: string;
     updatedAt?: string;
+    inventory?: {
+        quantity?: number
+    };
     product?: {
         id?: string;
         name: string;

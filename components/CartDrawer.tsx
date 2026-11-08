@@ -1,6 +1,6 @@
 /**
  * components/CartDrawer.tsx
- * Drawer ตะกร้าสินค้า — เลื่อนจากขวา เชื่อมต่อกับ CartContext & Backend API
+ * Drawer ตะกร้าสินค้า — เลื่อนจากขวา
  */
 "use client";
 
@@ -61,7 +61,6 @@ export default function CartDrawer() {
                     </button>
                 </div>
 
-                {/* Error Alert (เช่น สต็อกไม่พอ) */}
                 {cartError && (
                     <div className="cart-alert" role="alert">
                         <span>{cartError}</span>
@@ -77,10 +76,9 @@ export default function CartDrawer() {
                     </div>
                 ) : cart.length > 0 ? (
                     <>
-                        {/* Free shipping banner ตาม pricingService ของ Backend (ครบ 500 ส่งฟรี) */}
                         <div className="drawer-shipping-banner">
                             {remainingForFreeShipping === 0 ? (
-                                <span>✦ คุณได้รับสิทธิ์จัดส่งฟรี (STANDARD)</span>
+                                <span>คุณได้รับสิทธิ์จัดส่งฟรี (STANDARD)</span>
                             ) : (
                                 <span>
                                     ช้อปเพิ่มอีก <strong>{money(remainingForFreeShipping)}</strong>{" "}

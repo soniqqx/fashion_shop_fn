@@ -41,7 +41,7 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, index = 0 }: ProductCardProps) {
     const { addToCart, updatingItemId } = useCart();
-    const activeVariants = product.variants ?? [];
+    const activeVariants = (product.variants ?? []).filter(variant => variant.isActive);
     const [selectedIdx, setSelectedIdx] = useState(0);
     const selectedVariant = activeVariants[selectedIdx] ?? activeVariants[0];
     const isAdding = selectedVariant && updatingItemId === selectedVariant.id;

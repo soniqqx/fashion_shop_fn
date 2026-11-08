@@ -1,6 +1,6 @@
 /**
  * app/(main)/products/page.tsx
- * หน้ารายการสินค้าทั้งหมด — ดึงข้อมูล Product, Variant และ Category จาก Backend ด้วย axios
+ * หน้ารายการสินค้าทั้งหมด
  */
 "use client";
 
@@ -68,33 +68,29 @@ const SAMPLE_CATEGORIES: Category[] = [
 export default function ProductsPage() {
     const [products, setProducts] = useState<Product[]>(SAMPLE_PRODUCTS);
     const [categories, setCategories] = useState<Category[]>(SAMPLE_CATEGORIES);
-    const [status, setStatus] = useState("กำลังโหลดสินค้า…");
 
     useEffect(() => {
         async function load() {
             try {
-                const [{ data: liveProducts }, { data: liveCategories }, { data: liveVariants }] =
+                const [{ data: liveProducts }, { data: liveCategories }/* , { data: liveVariants } */] =
                     await Promise.all([
                         axios.get<Product[]>("/api/product/find-all"),
                         axios.get<Category[]>("/api/category/find-all"),
-                        axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
+                        // axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
                     ]);
 
-                const mergedProducts = liveProducts.map((prod) => ({
-                    ...prod,
-                    variants:
-                        prod.variants && prod.variants.length > 0
-                            ? prod.variants
-                            : liveVariants.filter((v) => v.productId === prod.id),
-                }));
+                // const mergedProducts = liveProducts.map((prod) => ({
+                //     ...prod,
+                //     variants:
+                //         prod.variants && prod.variants.length > 0
+                //             ? prod.variants
+                //             : liveVariants.filter((v) => v.productId === prod.id),
+                // }));
 
-                setProducts(mergedProducts);
+                setProducts(liveProducts);
                 setCategories(liveCategories);
-                setStatus(
-                    `โหลดสินค้าจาก backend แล้ว (${mergedProducts.length} รายการ)`
-                );
             } catch {
-                setStatus("แสดงข้อมูลตัวอย่าง — backend ยังไม่ได้เชื่อมต่อ");
+                /* ใช้ sample data ต่อไป */
             }
         }
         void load();
@@ -102,11 +98,6 @@ export default function ProductsPage() {
 
     return (
         <>
-            {/* Status bar */}
-            <div className="api-note">
-                <span className="live-dot" />
-                {status}
-            </div>
             {/* Hero banner */}
             <section className="products-hero">
                 <div>

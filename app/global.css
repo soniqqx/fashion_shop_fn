@@ -971,7 +971,17 @@ td small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px
   grid-template-columns: 28px 96px 1fr auto auto;
 }
 .cart-line-full.is-unavailable {
-  opacity: 0.55;
+  opacity: 0.6;
+}
+.cart-line-full.is-unavailable input:disabled,
+.cart-line-full.is-unavailable button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.cart-line-full.is-unavailable .remove-btn {
+  opacity: 1;
+  color: #c0392b;
+  cursor: pointer;
 }
 .cart-check-col {
   display: flex;

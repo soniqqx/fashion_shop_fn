@@ -1,6 +1,6 @@
 /**
  * app/(main)/cart/page.tsx
- * หน้าตะกร้าสินค้าฝั่ง User — เรียกใช้ Backend API ของ w_project_bn ด้วย axios โดยตรง
+ * หน้าตะกร้าสินค้าฝั่ง User
  */
 "use client";
 
@@ -9,7 +9,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import {
-    ArrowPathIcon,
     ArrowRightIcon,
     CheckIcon,
     InformationCircleIcon,
@@ -27,6 +26,7 @@ import { getToken } from "../../../lib/auth";
 import {
     Address,
     CartItemResponse,
+    CartLine,
     CheckoutResponse,
     CheckoutStage,
     CreateAddressInput,
@@ -36,11 +36,14 @@ import {
 
 const FREE_SHIPPING_THRESHOLD = 500;
 
-/**
- * คำนวณค่าจัดส่งให้ตรงกับ pricingService ใน w_project_bn:
- * - EXPRESS  = 100 บาท
- * - STANDARD = ยอดรวม >= 500 ฟรี (0 บาท) มิฉะนั้น 40 บาท
- */
+function isLineUnavailable(line: CartLine): boolean {
+    return (
+        line.product.isActive === false ||
+        line.variant.isActive === false ||
+        line.variant.inventory?.quantity == 0
+    );
+}
+
 function calculateShippingFee(method: ShippingMethod, subtotal: number): number {
     if (subtotal <= 0) return 0;
     if (method === "EXPRESS") return 100;
@@ -56,7 +59,6 @@ export default function CartPage() {
         updatingItemId,
         cartError,
         clearCartError,
-        isSyncedWithBackend,
         refreshCart,
         updateQuantity,
         setItemQuantity,
@@ -68,14 +70,14 @@ export default function CartPage() {
     const [stage, setStage] = useState<CheckoutStage>("cart");
     const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("STANDARD");
 
-    // รายการ cartItem.id ที่ติ๊กเลือกสำหรับนำไป Checkout
+    // รายการ cartItem.id ที่ติ๊กเลือกสำหรับนำไปสั่งซื้อ
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    // Modal ดูรายละเอียดสินค้าเชิงลึกจาก GET /api/cart-item/find-by-id/:itemId
+    // Modal ดูรายละเอียดสินค้า
     const [detailItem, setDetailItem] = useState<CartItemResponse | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
 
-    // ข้อมูลที่อยู่จัดส่ง (/api/address)
+    // ข้อมูลที่อยู่จัดส่ง
     const [addresses, setAddresses] = useState<Address[]>([]);
     const [addressLoading, setAddressLoading] = useState(false);
     const [addressMode, setAddressMode] = useState<"select" | "create">("create");
@@ -89,7 +91,7 @@ export default function CartPage() {
         postalCode: "",
     });
 
-    // ผลลัพธ์จากการ Checkout (/api/checkout) และการจ่ายเงิน (/api/payment/:paymentId/pay)
+    // ผลลัพธ์จากการสั่งซื้อและการชำระเงิน
     const [checkoutResult, setCheckoutResult] = useState<CheckoutResponse | null>(null);
     const [paidResult, setPaidResult] = useState<Payment | null>(null);
     const [paymentMethodChoice, setPaymentMethodChoice] = useState<"CARD" | "PROMPTPAY">("CARD");
@@ -97,11 +99,14 @@ export default function CartPage() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // Sync selectedIds เมื่อรายการในตะกร้าเปลี่ยน
+    useEffect(() => {
+        refreshCart()
+    }, [])
+
     useEffect(() => {
         setSelectedIds((prev) => {
             const validIds = cart
-                .filter((line) => (line.product.isActive ?? true) && (line.variant.isActive ?? true))
+                .filter((line) => !isLineUnavailable(line))
                 .map((line) => line.id);
             if (prev.length === 0) return validIds;
             const filtered = prev.filter((id) => validIds.includes(id));
@@ -109,7 +114,6 @@ export default function CartPage() {
         });
     }, [cart]);
 
-    // โหลดที่อยู่ของผู้ใช้เมื่อเข้าสู่ขั้นตอน address
     useEffect(() => {
         if (stage !== "address") return;
         async function fetchAddresses() {
@@ -137,10 +141,14 @@ export default function CartPage() {
         void fetchAddresses();
     }, [stage]);
 
-    // คำนวณยอดเฉพาะรายการที่เลือก
+    const availableLines = useMemo(
+        () => cart.filter((line) => !isLineUnavailable(line)),
+        [cart]
+    );
+
     const selectedLines = useMemo(
-        () => cart.filter((line) => selectedIds.includes(line.id)),
-        [cart, selectedIds]
+        () => availableLines.filter((line) => selectedIds.includes(line.id)),
+        [availableLines, selectedIds]
     );
 
     const selectedItemCount = useMemo(
@@ -164,24 +172,25 @@ export default function CartPage() {
 
     const grandTotal = selectedSubtotal + shippingFee;
     const allSelected =
-        cart.length > 0 &&
-        cart.every((line) => selectedIds.includes(line.id));
+        availableLines.length > 0 &&
+        availableLines.every((line) => selectedIds.includes(line.id));
 
     function toggleSelectAll() {
         if (allSelected) {
             setSelectedIds([]);
         } else {
-            setSelectedIds(cart.map((line) => line.id));
+            setSelectedIds(availableLines.map((line) => line.id));
         }
     }
 
     function toggleSelectItem(id: string) {
+        const targetLine = cart.find((line) => line.id === id);
+        if (!targetLine || isLineUnavailable(targetLine)) return;
         setSelectedIds((prev) =>
             prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
         );
     }
 
-    // เปิดดูรายละเอียดรายการในตะกร้าด้วย GET /api/cart-item/find-by-id/:itemId
     async function handleInspectItem(itemId: string) {
         if (!isUuid(itemId)) {
             const localLine = cart.find((l) => l.id === itemId);
@@ -219,13 +228,12 @@ export default function CartPage() {
             return;
         }
         if (!getToken()) {
-            setError("กรุณาเข้าสู่ระบบด้วยบัญชีผู้ใช้งาน (USER) ก่อนดำเนินการสั่งซื้อ");
+            setError("กรุณาเข้าสู่ระบบก่อนดำเนินการสั่งซื้อ");
             return;
         }
         setStage("address");
     }
 
-    // ตรวจสอบความถูกต้องของฟอร์มที่อยู่ตาม Zod schema ใน w_project_bn/src/schemas/address.ts
     function validateAddressInput(input: CreateAddressInput): string | null {
         if (input.recipientName.trim().length < 2) {
             return "ชื่อผู้รับต้องมีความยาวอย่างน้อย 2 ตัวอักษร";
@@ -248,7 +256,6 @@ export default function CartPage() {
         return null;
     }
 
-    // ---- ขั้นตอน Checkout (POST /api/address/create + POST /api/checkout) ----
     async function handleCheckout() {
         if (!getToken()) {
             setError("กรุณาเข้าสู่ระบบก่อนดำเนินการชำระเงิน");
@@ -264,7 +271,6 @@ export default function CartPage() {
         setLoading(true);
 
         try {
-            // 1. เตรียม Address ID (เลือกจากที่อยู่เดิม หรือสร้างใหม่ผ่าน POST /api/address/create)
             let addressIdToUse = selectedAddressId;
 
             if (addressMode === "create" || !isUuid(addressIdToUse)) {
@@ -289,18 +295,16 @@ export default function CartPage() {
                 setSelectedAddressId(addrData.id);
             }
 
-            // 2. ตรวจสอบว่า cartItemId ทุกตัวเป็น UUID จริงใน Backend
             const checkoutItemIds = selectedLines
                 .map((l) => l.id)
                 .filter((id) => isUuid(id));
 
             if (checkoutItemIds.length === 0) {
                 throw new Error(
-                    "รายการสินค้าในตะกร้ายังไม่ได้ซิงค์กับฐานข้อมูล กรุณาเข้าสู่ระบบด้วยบัญชี USER และเพิ่มสินค้าจากแคตตาล็อกจริง"
+                    "ไม่พบรายการสินค้าที่สามารถสั่งซื้อได้ กรุณาเข้าสู่ระบบแล้วลองอีกครั้ง"
                 );
             }
 
-            // 3. เรียก POST /api/checkout
             const { data } = await axios.post<CheckoutResponse>("/api/checkout", {
                 cartItemId: checkoutItemIds,
                 addressId: addressIdToUse,
@@ -325,7 +329,6 @@ export default function CartPage() {
         }
     }
 
-    // ---- ขั้นตอนยืนยันการชำระเงิน (PATCH /api/payment/:paymentId/pay) ----
     async function handlePay() {
         if (!checkoutResult) return;
         setError("");
@@ -350,9 +353,9 @@ export default function CartPage() {
             setLoading(false);
         }
     }
-
+    console.log(cart)
     // ============================================================
-    // STAGE 4: DONE (Order & Payment Confirmed)
+    // STAGE 4: DONE
     // ============================================================
     if (stage === "done" && checkoutResult) {
         const { order } = checkoutResult;
@@ -365,16 +368,16 @@ export default function CartPage() {
                     <p className="intro">ORDER CONFIRMED</p>
                     <h1>ขอบคุณสำหรับคำสั่งซื้อ</h1>
                     <p>
-                        คำสั่งซื้อของคุณได้รับการชำระเงินและสำรองสต็อกเรียบร้อยแล้ว
+                        คำสั่งซื้อของคุณได้รับการชำระเงินเรียบร้อยแล้ว
                     </p>
 
                     <div className="order-receipt">
                         <div className="receipt-row">
-                            <span>หมายเลขคำสั่งซื้อ (Order ID)</span>
+                            <span>หมายเลขคำสั่งซื้อ</span>
                             <code>{order.id}</code>
                         </div>
                         <div className="receipt-row">
-                            <span>รหัสการชำระเงิน (Payment ID)</span>
+                            <span>รหัสการชำระเงิน</span>
                             <code>{paidResult?.id ?? checkoutResult.payment.id}</code>
                         </div>
                         <div className="receipt-row">
@@ -438,7 +441,7 @@ export default function CartPage() {
     }
 
     // ============================================================
-    // STAGE 3: PAYMENT (PATCH /api/payment/:paymentId/pay)
+    // STAGE 3: PAYMENT
     // ============================================================
     if (stage === "payment" && checkoutResult) {
         const { order, payment } = checkoutResult;
@@ -545,7 +548,7 @@ export default function CartPage() {
     }
 
     // ============================================================
-    // STAGE 2: ADDRESS & SHIPPING (GET/POST /api/address + POST /api/checkout)
+    // STAGE 2: ADDRESS & SHIPPING
     // ============================================================
     if (stage === "address") {
         return (
@@ -553,16 +556,7 @@ export default function CartPage() {
                 <div className="checkout-wrap">
                     <p className="intro">CHECKOUT / 01 · SHIPPING & ADDRESS</p>
                     <h1>ข้อมูลสำหรับจัดส่ง</h1>
-                    <button
-                        className="text-button"
-                        style={{ marginTop: 14, fontSize: 12 }}
-                        onClick={() => {
-                            setError("");
-                            setStage("cart");
-                        }}
-                    >
-                        ← ย้อนกลับสู่ตะกร้าสินค้า
-                    </button>
+
                     {addresses.length > 0 && (
                         <div className="address-tabs">
                             <button
@@ -662,7 +656,6 @@ export default function CartPage() {
                         </div>
                     )}
 
-                    {/* เลือกรูปแบบการจัดส่ง (STANDARD / EXPRESS) ตาม Schema ของ Backend */}
                     <div className="shipping-methods-box">
                         <p className="field-label" style={{ marginBottom: 10 }}>
                             รูปแบบการจัดส่ง (SHIPPING METHOD)
@@ -706,7 +699,6 @@ export default function CartPage() {
                         </label>
                     </div>
 
-                    {/* สรุปยอดก่อนยืนยันสั่งซื้อ */}
                     <div className="checkout-breakdown">
                         <div className="summary-row">
                             <span>สินค้าที่เลือก ({selectedItemCount} ชิ้น)</span>
@@ -736,7 +728,7 @@ export default function CartPage() {
                         disabled={loading}
                     >
                         {loading ? (
-                            "กำลังสร้างคำสั่งซื้อและสำรองสต็อก…"
+                            "กำลังดำเนินการสั่งซื้อ…"
                         ) : (
                             <>
                                 ยืนยันที่อยู่และสั่งซื้อ ({money(grandTotal)}) <ArrowRightIcon />
@@ -769,27 +761,6 @@ export default function CartPage() {
 
     return (
         <div className="cart-page">
-            {/* แถบสถานะการเชื่อมต่อ API ตะกร้า */}
-            <div className="api-note cart-api-bar">
-                <div>
-                    <span className="live-dot" />
-                    {isSyncedWithBackend
-                        ? "เชื่อมต่อข้อมูลตะกร้าสินค้ากับ Backend API (/api/cart-item) แล้ว"
-                        : getToken()
-                            ? "โหมดตะกร้าสินค้า (กำลังซิงค์ข้อมูลกับเซิร์ฟเวอร์)"
-                            : "โหมดผู้เยี่ยมชม (Guest) — กรุณาเข้าสู่ระบบด้วยบัญชี USER เพื่อซิงค์ตะกร้าและสั่งซื้อจริง"}
-                </div>
-                <button
-                    type="button"
-                    className="sync-cart-btn"
-                    onClick={() => void refreshCart()}
-                    disabled={cartLoading}
-                >
-                    <ArrowPathIcon className={cartLoading ? "spin" : ""} />
-                    ซิงค์ตะกร้า
-                </button>
-            </div>
-
             <div className="cart-layout">
                 {/* Left — Cart items */}
                 <section className="cart-items-section">
@@ -808,14 +779,14 @@ export default function CartPage() {
                                 <input
                                     type="checkbox"
                                     checked={allSelected}
+                                    disabled={availableLines.length === 0}
                                     onChange={toggleSelectAll}
                                 />
-                                <span>เลือกทั้งหมด ({cart.length})</span>
+                                <span>เลือกทั้งหมด ({availableLines.length})</span>
                             </label>
                         )}
                     </div>
 
-                    {/* แจ้งเตือน Error จาก CartContext หรือ Checkout */}
                     {(cartError || error) && (
                         <div className="cart-alert" role="alert">
                             <span>{cartError || error}</span>
@@ -833,7 +804,7 @@ export default function CartPage() {
 
                     {cartLoading && cart.length === 0 ? (
                         <div className="cart-empty">
-                            <p>กำลังโหลดรายการสินค้าในตะกร้าจากระบบ…</p>
+                            <p>กำลังโหลดรายการสินค้าในตะกร้า…</p>
                         </div>
                     ) : cart.length === 0 ? (
                         <div className="cart-empty">
@@ -848,10 +819,8 @@ export default function CartPage() {
                         <div className="cart-lines-full">
                             {cart.map((line) => {
                                 const isUpdating = updatingItemId === line.id;
-                                const isSelected = selectedIds.includes(line.id);
-                                const isUnavailable =
-                                    line.product.isActive === false ||
-                                    line.variant.isActive === false;
+                                const isUnavailable = isLineUnavailable(line);
+                                const isSelected = !isUnavailable && selectedIds.includes(line.id);
 
                                 return (
                                     <div
@@ -859,7 +828,6 @@ export default function CartPage() {
                                             } ${isUnavailable ? "is-unavailable" : ""}`}
                                         key={line.id}
                                     >
-                                        {/* Checkbox เลือกรายการสำหรับ Checkout */}
                                         <div className="cart-check-col">
                                             <input
                                                 type="checkbox"
@@ -870,7 +838,6 @@ export default function CartPage() {
                                             />
                                         </div>
 
-                                        {/* Swatch */}
                                         <div
                                             className="cart-swatch-lg"
                                             style={{ background: tone(line.variant.color) }}
@@ -878,7 +845,6 @@ export default function CartPage() {
                                             <span>{line.variant.size}</span>
                                         </div>
 
-                                        {/* Info */}
                                         <div className="cart-line-info">
                                             <div className="cart-line-title-row">
                                                 <h3>{line.product.name}</h3>
@@ -902,7 +868,7 @@ export default function CartPage() {
                                                     type="button"
                                                     className="inspect-item-btn"
                                                     onClick={() => void handleInspectItem(line.id)}
-                                                    disabled={detailLoading}
+                                                    disabled={detailLoading || isUnavailable}
                                                 >
                                                     <InformationCircleIcon />
                                                     ดูรายละเอียด
@@ -910,13 +876,15 @@ export default function CartPage() {
                                             </div>
                                         </div>
 
-                                        {/* Quantity + Remove */}
                                         <div className="cart-actions">
                                             <div className="quantity">
                                                 <button
                                                     id={`cart-dec-${line.id}`}
-                                                    onClick={() => void updateQuantity(line.id, -1)}
-                                                    disabled={isUpdating}
+                                                    onClick={() => {
+                                                        if (isUnavailable) return;
+                                                        void updateQuantity(line.id, -1);
+                                                    }}
+                                                    disabled={isUpdating || isUnavailable}
                                                     aria-label="ลดจำนวน"
                                                 >
                                                     <MinusIcon />
@@ -926,8 +894,10 @@ export default function CartPage() {
                                                     min={1}
                                                     className="qty-input"
                                                     value={line.quantity}
-                                                    disabled={isUpdating}
+                                                    disabled={isUpdating || isUnavailable}
+                                                    readOnly={isUnavailable}
                                                     onChange={(e) => {
+                                                        if (isUnavailable) return;
                                                         const val = parseInt(e.target.value, 10);
                                                         if (!Number.isNaN(val) && val >= 1) {
                                                             void setItemQuantity(line.id, val);
@@ -937,8 +907,11 @@ export default function CartPage() {
                                                 />
                                                 <button
                                                     id={`cart-inc-${line.id}`}
-                                                    onClick={() => void updateQuantity(line.id, 1)}
-                                                    disabled={isUpdating}
+                                                    onClick={() => {
+                                                        if (isUnavailable) return;
+                                                        void updateQuantity(line.id, 1);
+                                                    }}
+                                                    disabled={isUpdating || isUnavailable}
                                                     aria-label="เพิ่มจำนวน"
                                                 >
                                                     <PlusIcon />
@@ -956,7 +929,6 @@ export default function CartPage() {
                                             </button>
                                         </div>
 
-                                        {/* Line subtotal */}
                                         <div className="cart-subtotal">
                                             {money(Number(line.variant.price) * line.quantity)}
                                         </div>
@@ -964,7 +936,6 @@ export default function CartPage() {
                                 );
                             })}
 
-                            {/* Clear all */}
                             <div className="cart-footer-actions">
                                 <Link href="/products" className="text-button">
                                     ← เลือกซื้อสินค้าเพิ่มเติม
@@ -986,7 +957,6 @@ export default function CartPage() {
                     <aside className="order-summary">
                         <h2>สรุปคำสั่งซื้อ</h2>
 
-                        {/* โปรโมชันส่งฟรีเมื่อครบ 500 บาท (อิงตาม pricingService ของ Backend) */}
                         <div className="free-shipping-box">
                             <div className="free-shipping-head">
                                 <TruckIcon />
@@ -1012,7 +982,6 @@ export default function CartPage() {
                             </div>
                         </div>
 
-                        {/* ตัวเลือกรูปแบบการจัดส่ง */}
                         <div className="summary-shipping-selector">
                             <p className="field-label">รูปแบบการจัดส่ง</p>
                             <label className="summary-radio">
@@ -1067,7 +1036,7 @@ export default function CartPage() {
                             <strong>{money(grandTotal)}</strong>
                         </div>
                         <p className="summary-note">
-                            รวมภาษีมูลค่าเพิ่มแล้ว · ระบบจะสำรองสต็อกเมื่อยืนยันคำสั่งซื้อ
+                            รวมภาษีมูลค่าเพิ่มแล้ว
                         </p>
 
                         {!getToken() && (
@@ -1080,7 +1049,7 @@ export default function CartPage() {
                                         <Link href="/login" className="login-link">
                                             เข้าสู่ระบบ
                                         </Link>{" "}
-                                        ด้วยบัญชีผู้ใช้งาน (USER) เพื่อบันทึกตะกร้าและชำระเงิน
+                                        เพื่อดำเนินการสั่งซื้อและชำระเงิน
                                     </p>
                                 </div>
                             </div>
@@ -1116,7 +1085,6 @@ export default function CartPage() {
                 )}
             </div>
 
-            {/* Modal แสดงรายละเอียด CartItem จาก GET /api/cart-item/find-by-id/:itemId */}
             {detailItem && (
                 <div className="overlay" onClick={() => setDetailItem(null)}>
                     <div
@@ -1156,14 +1124,6 @@ export default function CartPage() {
                                         {detailItem.variant.product.description}
                                     </p>
                                 )}
-                                <div className="receipt-row">
-                                    <span>รหัสรายการตะกร้า (CartItem ID)</span>
-                                    <code>{detailItem.id}</code>
-                                </div>
-                                <div className="receipt-row">
-                                    <span>รหัสตัวเลือกสินค้า (Variant ID)</span>
-                                    <code>{detailItem.variantId}</code>
-                                </div>
                                 {detailItem.variant.sku && (
                                     <div className="receipt-row">
                                         <span>รหัส SKU</span>

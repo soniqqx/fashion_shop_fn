@@ -1,6 +1,5 @@
 /**
  * app/(main)/page.tsx — หน้าแรก (store front)
- * โหลด Product, Variant และ Category จาก Backend API ด้วย axios
  */
 "use client";
 
@@ -75,31 +74,27 @@ const sampleCategories: Category[] = [
 export default function Home() {
     const [products, setProducts] = useState<Product[]>(sampleProducts);
     const [categories, setCategories] = useState<Category[]>(sampleCategories);
-    const [notice, setNotice] = useState(
-        "กำลังแสดง catalog ตัวอย่าง หาก backend ทำงาน ระบบจะอ่านข้อมูลจริงอัตโนมัติ"
-    );
 
     useEffect(() => {
         async function loadCatalog() {
             try {
-                const [{ data: rawProducts }, { data: rawCategories }, { data: rawVariants }] =
+                const [{ data: rawProducts }, { data: rawCategories }/* , { data: rawVariants } */] =
                     await Promise.all([
                         axios.get<Product[]>("/api/product/find-all"),
                         axios.get<Category[]>("/api/category/find-all"),
-                        axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
+                        // axios.get<Variant[]>("/api/variant/find-all").catch(() => ({ data: [] as Variant[] })),
                     ]);
 
-                const mergedProducts = rawProducts.map((prod) => ({
-                    ...prod,
-                    variants:
-                        prod.variants && prod.variants.length > 0
-                            ? prod.variants
-                            : rawVariants.filter((v) => v.productId === prod.id),
-                }));
+                // const mergedProducts = rawProducts.map((prod) => ({
+                //     ...prod,
+                //     variants:
+                //         prod.variants && prod.variants.length > 0
+                //             ? prod.variants
+                //             : rawVariants.filter((v) => v.productId === prod.id),
+                // }));
 
-                setProducts(mergedProducts);
+                setProducts(rawProducts);
                 setCategories(rawCategories);
-                setNotice("เชื่อมต่อ catalog จาก backend แล้ว");
             } catch {
                 /* ใช้ sample data ต่อไป */
             }
@@ -109,11 +104,6 @@ export default function Home() {
 
     return (
         <>
-            {/* API status bar */}
-            <div className="api-note">
-                <span className="live-dot" />
-                {notice}
-            </div>
             {/* Hero */}
             <section className="store-hero">
                 <div>

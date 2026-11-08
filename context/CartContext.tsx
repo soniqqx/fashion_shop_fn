@@ -42,6 +42,9 @@ function mapCartItemToLine(item: CartItemResponse): CartLine {
             size: item.variant.size,
             unit: item.variant.unit ?? "ตัว",
             isActive: item.variant.isActive ?? true,
+            inventory: {
+                quantity: item.variant.inventory?.quantity
+            }
         },
         product: {
             name: item.variant?.product?.name ?? "สินค้า",
@@ -250,24 +253,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 const existing = prev.find((line) => line.variant.id === variant.id);
                 const next = existing
                     ? prev.map((line) =>
-                          line.variant.id === variant.id
-                              ? { ...line, quantity: line.quantity + quantity }
-                              : line
-                      )
+                        line.variant.id === variant.id
+                            ? { ...line, quantity: line.quantity + quantity }
+                            : line
+                    )
                     : [
-                          ...prev,
-                          {
-                              id: `local-${variant.id}`,
-                              variantId: variant.id,
-                              variant,
-                              product: {
-                                  name: product.name,
-                                  description: product.description ?? null,
-                                  isActive: product.isActive ?? true,
-                              },
-                              quantity,
-                          },
-                      ];
+                        ...prev,
+                        {
+                            id: `local-${variant.id}`,
+                            variantId: variant.id,
+                            variant,
+                            product: {
+                                name: product.name,
+                                description: product.description ?? null,
+                                isActive: product.isActive ?? true,
+                            },
+                            quantity,
+                        },
+                    ];
                 saveLocalCart(next);
                 return next;
             });
