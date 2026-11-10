@@ -93,6 +93,7 @@ export default function CartPage() {
 
     // ผลลัพธ์จากการสั่งซื้อและการชำระเงิน
     const [checkoutResult, setCheckoutResult] = useState<CheckoutResponse | null>(null);
+    const [orderedLines, setOrderedLines] = useState<CartLine[]>([]);
     const [paidResult, setPaidResult] = useState<Payment | null>(null);
     const [paymentMethodChoice, setPaymentMethodChoice] = useState<"CARD" | "PROMPTPAY">("CARD");
 
@@ -311,6 +312,7 @@ export default function CartPage() {
                 shippingMethod,
             });
 
+            setOrderedLines(selectedLines);
             setCheckoutResult(data);
             await refreshCart();
             setStage("payment");
@@ -353,7 +355,105 @@ export default function CartPage() {
             setLoading(false);
         }
     }
-    console.log(cart)
+
+    function renderCheckoutStepper(currentStep: 1 | 2 | 3) {
+        const steps = [
+            { num: 1, title: "ขั้นที่ 1", subtitle: "ที่อยู่และการจัดส่ง" },
+            { num: 2, title: "ขั้นที่ 2", subtitle: "ชำระเงิน" },
+            { num: 3, title: "ขั้นที่ 3", subtitle: "เสร็จสมบูรณ์" },
+        ];
+
+        return (
+            <div className="checkout-top-header">
+                <div className="checkout-stepper" aria-label="ขั้นตอนการสั่งซื้อ">
+                    {steps.map((s, idx) => {
+                        const isCompleted = currentStep > s.num;
+                        const isActive = currentStep === s.num;
+                        return (
+                            <div
+                                key={s.num}
+                                className={`stepper-item ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""
+                                    }`}
+                            >
+                                <div className="stepper-circle">
+                                    {isCompleted ? <CheckIcon /> : s.num}
+                                </div>
+                                <div className="stepper-label">
+                                    <span>{s.title}</span>
+                                    <strong>{s.subtitle}</strong>
+                                </div>
+                                {idx < steps.length - 1 && (
+                                    <div
+                                        className={`stepper-line ${isCompleted ? "completed" : ""
+                                            }`}
+                                    />
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    function renderOrderedItemsSidebar(
+        items: CartLine[],
+        subtotalVal: number | string,
+        shippingVal: number | string,
+        totalVal: number | string,
+        methodVal: ShippingMethod
+    ) {
+        const totalQty = items.reduce((sum, l) => sum + l.quantity, 0);
+        return (
+            <aside className="checkout-order-sidebar" aria-label="รายการสินค้าที่สั่งซื้อ">
+                <h2>รายการสินค้าที่สั่งซื้อ ({totalQty} ชิ้น)</h2>
+                <div className="checkout-items-list">
+                    {items.map((line) => (
+                        <div className="checkout-item-row" key={line.id}>
+                            <div
+                                className="checkout-item-swatch"
+                                style={{ background: tone(line.variant.color) }}
+                            >
+                                <span>{line.variant.size}</span>
+                            </div>
+                            <div className="checkout-item-info">
+                                <strong>{line.product.name}</strong>
+                                <p>
+                                    สี: {line.variant.color} · ไซส์: {line.variant.size}
+                                </p>
+                                <small>
+                                    {money(line.variant.price)} × {line.quantity}{" "}
+                                    {line.variant.unit ?? "ตัว"}
+                                </small>
+                            </div>
+                            <div className="checkout-item-subtotal">
+                                {money(Number(line.variant.price) * line.quantity)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="checkout-sidebar-summary">
+                    <div className="summary-row">
+                        <span>ราคาสินค้า ({totalQty} ชิ้น)</span>
+                        <span>{money(subtotalVal)}</span>
+                    </div>
+                    <div className="summary-row">
+                        <span>ค่าจัดส่ง ({methodVal})</span>
+                        <span>
+                            {Number(shippingVal) === 0 ? "ฟรี (฿0)" : money(shippingVal)}
+                        </span>
+                    </div>
+                    <div className="summary-divider" />
+                    <div className="summary-row summary-total">
+                        <strong>ยอดรวมคำสั่งซื้อ</strong>
+                        <strong>{money(totalVal)}</strong>
+                    </div>
+                </div>
+            </aside>
+        );
+    }
+
     // ============================================================
     // STAGE 4: DONE
     // ============================================================
@@ -361,80 +461,98 @@ export default function CartPage() {
         const { order } = checkoutResult;
         return (
             <div className="cart-page">
-                <div className="success-wrap">
-                    <div className="success-icon">
-                        <CheckIcon />
-                    </div>
-                    <p className="intro">ORDER CONFIRMED</p>
-                    <h1>ขอบคุณสำหรับคำสั่งซื้อ</h1>
-                    <p>
-                        คำสั่งซื้อของคุณได้รับการชำระเงินเรียบร้อยแล้ว
-                    </p>
-
-                    <div className="order-receipt">
-                        <div className="receipt-row">
-                            <span>หมายเลขคำสั่งซื้อ</span>
-                            <code>{order.id}</code>
-                        </div>
-                        <div className="receipt-row">
-                            <span>รหัสการชำระเงิน</span>
-                            <code>{paidResult?.id ?? checkoutResult.payment.id}</code>
-                        </div>
-                        <div className="receipt-row">
-                            <span>สถานะการชำระเงิน</span>
-                            <strong className="receipt-badge">
-                                {paidResult?.status ?? "COMPLETED"}
-                            </strong>
-                        </div>
-                        <div className="receipt-row">
-                            <span>ผู้รับสินค้า</span>
-                            <span>
-                                {order.shippingName} ({order.shippingPhone})
-                            </span>
-                        </div>
-                        <div className="receipt-row">
-                            <span>ที่อยู่จัดส่ง</span>
-                            <span>
-                                {order.shippingAddressLine}, {order.shippingDistrict},{" "}
-                                {order.shippingProvince} {order.shippingPostalCode}
-                            </span>
-                        </div>
-                        <div className="receipt-row">
-                            <span>รูปแบบการจัดส่ง</span>
-                            <span>{order.shippingMethod}</span>
-                        </div>
-                        <div className="receipt-divider" />
-                        <div className="receipt-row">
-                            <span>ราคาสินค้า</span>
-                            <span>{money(order.subtotalAmount)}</span>
-                        </div>
-                        <div className="receipt-row">
-                            <span>ค่าจัดส่ง</span>
-                            <span>{money(order.shippingFee)}</span>
-                        </div>
-                        <div className="receipt-row receipt-total">
-                            <strong>ยอดชำระทั้งสิ้น</strong>
-                            <strong>{money(order.totalAmount)}</strong>
-                        </div>
+                <div className="checkout-columns">
+                    {/* Column 1: ปุ่มย้อนกลับสู่ตะกร้า (แยก Column ซ้ายบน) */}
+                    <div className="checkout-back-col">
+                        <button
+                            type="button"
+                            className="back-to-cart-top-btn"
+                            onClick={() => {
+                                setError("");
+                                setCheckoutResult(null);
+                                setPaidResult(null);
+                                setStage("cart");
+                            }}
+                        >
+                            ← ย้อนกลับสู่ตะกร้าสินค้า
+                        </button>
                     </div>
 
-                    <div className="receipt-actions">
-                        <Link href="/products" className="solid-button">
-                            เลือกซื้อสินค้าต่อ <ArrowRightIcon />
-                        </Link>
-                        {cart.length > 0 && (
-                            <button
-                                className="outline-button"
-                                onClick={() => {
-                                    setCheckoutResult(null);
-                                    setPaidResult(null);
-                                    setStage("cart");
-                                }}
-                            >
-                                กลับไปดูตะกร้าสินค้า ({cartCount} ชิ้นที่เหลือ)
-                            </button>
-                        )}
+                    {/* Column 2: เนื้อหาหลัก */}
+                    <div className="checkout-main-col">
+                        {renderCheckoutStepper(3)}
+                        <div className="success-wrap" style={{ padding: "20px 0 0" }}>
+                            <div className="success-icon">
+                                <CheckIcon />
+                            </div>
+                            <p className="intro">ORDER CONFIRMED</p>
+                            <h1>ขอบคุณสำหรับคำสั่งซื้อ</h1>
+                            <p>
+                                คำสั่งซื้อของคุณได้รับการชำระเงินเรียบร้อยแล้ว
+                            </p>
+
+                            <div className="order-receipt">
+                                <div className="receipt-row">
+                                    <span>หมายเลขคำสั่งซื้อ</span>
+                                    <code>{order.id}</code>
+                                </div>
+                                <div className="receipt-row">
+                                    <span>รหัสการชำระเงิน</span>
+                                    <code>{paidResult?.id ?? checkoutResult.payment.id}</code>
+                                </div>
+                                <div className="receipt-row">
+                                    <span>สถานะการชำระเงิน</span>
+                                    <strong className="receipt-badge">
+                                        {paidResult?.status ?? "COMPLETED"}
+                                    </strong>
+                                </div>
+                                <div className="receipt-row">
+                                    <span>ผู้รับสินค้า</span>
+                                    <span>
+                                        {order.shippingName} ({order.shippingPhone})
+                                    </span>
+                                </div>
+                                <div className="receipt-row">
+                                    <span>ที่อยู่จัดส่ง</span>
+                                    <span>
+                                        {order.shippingAddressLine}, {order.shippingDistrict},{" "}
+                                        {order.shippingProvince} {order.shippingPostalCode}
+                                    </span>
+                                </div>
+                                <div className="receipt-row">
+                                    <span>รูปแบบการจัดส่ง</span>
+                                    <span>{order.shippingMethod}</span>
+                                </div>
+                            </div>
+
+                            <div className="receipt-actions">
+                                <Link href="/products" className="solid-button">
+                                    เลือกซื้อสินค้าต่อ <ArrowRightIcon />
+                                </Link>
+                                {cart.length > 0 && (
+                                    <button
+                                        className="outline-button"
+                                        onClick={() => {
+                                            setCheckoutResult(null);
+                                            setPaidResult(null);
+                                            setStage("cart");
+                                        }}
+                                    >
+                                        กลับไปดูตะกร้าสินค้า ({cartCount} ชิ้นที่เหลือ)
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Column 3: รายการสินค้าที่สั่งซื้อ */}
+                    {renderOrderedItemsSidebar(
+                        orderedLines,
+                        order.subtotalAmount,
+                        order.shippingFee,
+                        order.totalAmount,
+                        order.shippingMethod
+                    )}
                 </div>
             </div>
         );
@@ -454,94 +572,106 @@ export default function CartPage() {
 
         return (
             <div className="cart-page">
-                <div className="checkout-wrap">
-                    <p className="intro">CHECKOUT / 02 · PAYMENT</p>
-                    <h1>ชำระเงินคำสั่งซื้อ</h1>
-
-                    <div className="order-meta-box">
-                        <div>
-                            <span>ORDER ID</span>
-                            <code>{order.id}</code>
-                        </div>
-                        <div>
-                            <span>PAYMENT ID</span>
-                            <code>{payment.id}</code>
-                        </div>
-                        <div>
-                            <span>กรุณาชำระภายใน</span>
-                            <strong>{expiresText} น.</strong>
-                        </div>
+                <div className="checkout-columns">
+                    {/* Column 1: ปุ่มย้อนกลับสู่ตะกร้า (แยก Column ซ้ายบน) */}
+                    <div className="checkout-back-col">
+                        <button
+                            type="button"
+                            className="back-to-cart-top-btn"
+                            onClick={() => {
+                                setError("");
+                                setStage("cart");
+                            }}
+                        >
+                            ← ย้อนกลับสู่ตะกร้าสินค้า
+                        </button>
                     </div>
 
-                    <div className="payment-card">
-                        <span>ATELIER PAY · {paymentMethodChoice}</span>
-                        <strong>
-                            {paymentMethodChoice === "CARD"
-                                ? "••••  ••••  ••••  4242"
-                                : "PROMPTPAY QR · INSTANT"}
-                        </strong>
-                        <small>
-                            AMOUNT DUE: {money(order.totalAmount)} · STATUS: {payment.status}
-                        </small>
-                    </div>
+                    {/* Column 2: ข้อมูลการชำระเงิน */}
+                    <div className="checkout-main-col">
+                        {renderCheckoutStepper(2)}
+                        {/* <p className="intro">STEP 02 · PAYMENT</p> */}
+                        <h1>ชำระเงินคำสั่งซื้อ</h1>
 
-                    <label className="payment-choice">
-                        <input
-                            type="radio"
-                            name="payment"
-                            checked={paymentMethodChoice === "CARD"}
-                            onChange={() => setPaymentMethodChoice("CARD")}
-                        />
-                        บัตรเครดิต / เดบิต
-                        <span>{money(order.totalAmount)}</span>
-                    </label>
-                    <label className="payment-choice">
-                        <input
-                            type="radio"
-                            name="payment"
-                            checked={paymentMethodChoice === "PROMPTPAY"}
-                            onChange={() => setPaymentMethodChoice("PROMPTPAY")}
-                        />
-                        QR พร้อมเพย์ (PromptPay)
-                        <span>{money(order.totalAmount)}</span>
-                    </label>
+                        <div className="order-meta-box">
+                            <div>
+                                <span>ORDER ID</span>
+                                <code>{order.id}</code>
+                            </div>
+                            <div>
+                                <span>PAYMENT ID</span>
+                                <code>{payment.id}</code>
+                            </div>
+                            <div>
+                                <span>กรุณาชำระภายใน</span>
+                                <strong>{expiresText} น.</strong>
+                            </div>
+                        </div>
 
-                    <div className="checkout-breakdown">
-                        <div className="summary-row">
-                            <span>ยอดรวมสินค้า</span>
-                            <span>{money(order.subtotalAmount)}</span>
+                        <div className="payment-card">
+                            <span>ATELIER PAY · {paymentMethodChoice}</span>
+                            <strong>
+                                {paymentMethodChoice === "CARD"
+                                    ? "••••  ••••  ••••  4242"
+                                    : "PROMPTPAY QR · INSTANT"}
+                            </strong>
+                            <small>
+                                AMOUNT DUE: {money(order.totalAmount)} · STATUS: {payment.status}
+                            </small>
                         </div>
-                        <div className="summary-row">
-                            <span>ค่าจัดส่ง ({order.shippingMethod})</span>
-                            <span>{money(order.shippingFee)}</span>
-                        </div>
-                        <div className="summary-divider" />
-                        <div className="summary-row summary-total">
-                            <strong>ยอดที่ต้องชำระ</strong>
-                            <strong>{money(order.totalAmount)}</strong>
-                        </div>
-                    </div>
 
-                    {error && (
-                        <div className="login-error" style={{ marginTop: 14 }}>
-                            {error}
-                        </div>
-                    )}
+                        <label className="payment-choice">
+                            <input
+                                type="radio"
+                                name="payment"
+                                checked={paymentMethodChoice === "CARD"}
+                                onChange={() => setPaymentMethodChoice("CARD")}
+                            />
+                            บัตรเครดิต / เดบิต
+                            <span>{money(order.totalAmount)}</span>
+                        </label>
+                        <label className="payment-choice">
+                            <input
+                                type="radio"
+                                name="payment"
+                                checked={paymentMethodChoice === "PROMPTPAY"}
+                                onChange={() => setPaymentMethodChoice("PROMPTPAY")}
+                            />
+                            QR พร้อมเพย์ (PromptPay)
+                            <span>{money(order.totalAmount)}</span>
+                        </label>
 
-                    <button
-                        id="confirm-pay-btn"
-                        className="solid-button full"
-                        onClick={handlePay}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            "กำลังยืนยันการชำระเงิน…"
-                        ) : (
-                            <>
-                                ยืนยันการชำระเงิน {money(order.totalAmount)} <CheckIcon />
-                            </>
+                        {error && (
+                            <div className="login-error" style={{ marginTop: 14 }}>
+                                {error}
+                            </div>
                         )}
-                    </button>
+
+                        <button
+                            id="confirm-pay-btn"
+                            className="solid-button full"
+                            style={{ marginTop: 20 }}
+                            onClick={handlePay}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                "กำลังยืนยันการชำระเงิน…"
+                            ) : (
+                                <>
+                                    ยืนยันการชำระเงิน {money(order.totalAmount)} <CheckIcon />
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Column 3: รายการสินค้าที่สั่งซื้อ */}
+                    {renderOrderedItemsSidebar(
+                        orderedLines,
+                        order.subtotalAmount,
+                        order.shippingFee,
+                        order.totalAmount,
+                        order.shippingMethod
+                    )}
                 </div>
             </div>
         );
@@ -553,199 +683,217 @@ export default function CartPage() {
     if (stage === "address") {
         return (
             <div className="cart-page">
-                <div className="checkout-wrap">
-                    <p className="intro">CHECKOUT / 01 · SHIPPING & ADDRESS</p>
-                    <h1>ข้อมูลสำหรับจัดส่ง</h1>
+                <div className="checkout-columns">
+                    {/* Column 1: ปุ่มย้อนกลับสู่ตะกร้า (แยก Column ซ้ายบน) */}
+                    <div className="checkout-back-col">
+                        <button
+                            type="button"
+                            className="back-to-cart-top-btn"
+                            onClick={() => {
+                                setError("");
+                                setStage("cart");
+                            }}
+                        >
+                            ← ย้อนกลับสู่ตะกร้าสินค้า
+                        </button>
+                    </div>
 
-                    {addresses.length > 0 && (
-                        <div className="address-tabs">
-                            <button
-                                type="button"
-                                className={addressMode === "select" ? "active" : ""}
-                                onClick={() => setAddressMode("select")}
-                            >
-                                เลือกจากที่อยู่ที่บันทึกไว้ ({addresses.length})
-                            </button>
-                            <button
-                                type="button"
-                                className={addressMode === "create" ? "active" : ""}
-                                onClick={() => setAddressMode("create")}
-                            >
-                                + เพิ่มที่อยู่จัดส่งใหม่
-                            </button>
-                        </div>
-                    )}
+                    {/* Column 2: ข้อมูลสำหรับจัดส่ง */}
+                    <div className="checkout-main-col">
+                        {renderCheckoutStepper(1)}
+                        {/* <p className="intro">STEP 01 · SHIPPING & ADDRESS</p> */}
+                        <h1>ข้อมูลสำหรับจัดส่ง</h1>
 
-                    {addressLoading ? (
-                        <p className="cart-status-text">กำลังโหลดข้อมูลที่อยู่…</p>
-                    ) : addressMode === "select" && addresses.length > 0 ? (
-                        <div className="saved-address-list">
-                            {addresses.map((addr) => (
-                                <label
-                                    key={addr.id}
-                                    className={`saved-address-card ${selectedAddressId === addr.id ? "selected" : ""
-                                        }`}
+                        {addresses.length > 0 && (
+                            <div className="address-tabs">
+                                <button
+                                    type="button"
+                                    className={addressMode === "select" ? "active" : ""}
+                                    onClick={() => setAddressMode("select")}
                                 >
-                                    <input
-                                        type="radio"
-                                        name="savedAddress"
-                                        checked={selectedAddressId === addr.id}
-                                        onChange={() => setSelectedAddressId(addr.id)}
-                                    />
-                                    <div>
-                                        <div className="saved-address-head">
-                                            <strong>{addr.recipientName}</strong>
-                                            <span>{addr.phone}</span>
-                                        </div>
-                                        <p>
-                                            {addr.addressLine}, {addr.district}, {addr.province}{" "}
-                                            {addr.postalCode}
-                                        </p>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="address-grid">
-                            <input
-                                placeholder="ชื่อ-นามสกุลผู้รับ (อย่างน้อย 2 ตัวอักษร)"
-                                value={newAddress.recipientName}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, recipientName: e.target.value })
-                                }
-                            />
-                            <input
-                                placeholder="เบอร์โทรศัพท์ 10 หลัก (เช่น 0812345678)"
-                                maxLength={10}
-                                value={newAddress.phone}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, phone: e.target.value })
-                                }
-                            />
-                            <input
-                                className="wide"
-                                placeholder="บ้านเลขที่ ซอย ถนน แขวง/ตำบล (อย่างน้อย 5 ตัวอักษร)"
-                                value={newAddress.addressLine}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, addressLine: e.target.value })
-                                }
-                            />
-                            <input
-                                placeholder="เขต / อำเภอ"
-                                value={newAddress.district}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, district: e.target.value })
-                                }
-                            />
-                            <input
-                                placeholder="จังหวัด"
-                                value={newAddress.province}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, province: e.target.value })
-                                }
-                            />
-                            <input
-                                className="wide"
-                                placeholder="รหัสไปรษณีย์ 5 หลัก (เช่น 10110)"
-                                maxLength={5}
-                                value={newAddress.postalCode}
-                                onChange={(e) =>
-                                    setNewAddress({ ...newAddress, postalCode: e.target.value })
-                                }
-                            />
-                        </div>
-                    )}
-
-                    <div className="shipping-methods-box">
-                        <p className="field-label" style={{ marginBottom: 10 }}>
-                            รูปแบบการจัดส่ง (SHIPPING METHOD)
-                        </p>
-                        <label
-                            className={`shipping-option ${shippingMethod === "STANDARD" ? "selected" : ""
-                                }`}
-                        >
-                            <input
-                                type="radio"
-                                name="shippingMethod"
-                                checked={shippingMethod === "STANDARD"}
-                                onChange={() => setShippingMethod("STANDARD")}
-                            />
-                            <div>
-                                <span>STANDARD</span>
-                                <strong>จัดส่งมาตรฐาน 2–4 วันทำการ (ครบ ฿500 ส่งฟรี)</strong>
+                                    เลือกจากที่อยู่ที่บันทึกไว้ ({addresses.length})
+                                </button>
+                                <button
+                                    type="button"
+                                    className={addressMode === "create" ? "active" : ""}
+                                    onClick={() => setAddressMode("create")}
+                                >
+                                    + เพิ่มที่อยู่จัดส่งใหม่
+                                </button>
                             </div>
-                            <b>
-                                {selectedSubtotal >= FREE_SHIPPING_THRESHOLD
-                                    ? "ฟรี (฿0)"
-                                    : "฿40"}
-                            </b>
-                        </label>
-
-                        <label
-                            className={`shipping-option ${shippingMethod === "EXPRESS" ? "selected" : ""
-                                }`}
-                        >
-                            <input
-                                type="radio"
-                                name="shippingMethod"
-                                checked={shippingMethod === "EXPRESS"}
-                                onChange={() => setShippingMethod("EXPRESS")}
-                            />
-                            <div>
-                                <span>EXPRESS</span>
-                                <strong>จัดส่งด่วนพิเศษ 1–2 วันทำการ</strong>
-                            </div>
-                            <b>฿100</b>
-                        </label>
-                    </div>
-
-                    <div className="checkout-breakdown">
-                        <div className="summary-row">
-                            <span>สินค้าที่เลือก ({selectedItemCount} ชิ้น)</span>
-                            <span>{money(selectedSubtotal)}</span>
-                        </div>
-                        <div className="summary-row">
-                            <span>ค่าจัดส่ง ({shippingMethod})</span>
-                            <span>{shippingFee === 0 ? "ฟรี (฿0)" : money(shippingFee)}</span>
-                        </div>
-                        <div className="summary-divider" />
-                        <div className="summary-row summary-total">
-                            <strong>ยอดรวมคำสั่งซื้อ</strong>
-                            <strong>{money(grandTotal)}</strong>
-                        </div>
-                    </div>
-
-                    {error && (
-                        <div className="login-error" style={{ marginBottom: 12 }}>
-                            {error}
-                        </div>
-                    )}
-
-                    <button
-                        id="go-payment-btn"
-                        className="solid-button full"
-                        onClick={handleCheckout}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            "กำลังดำเนินการสั่งซื้อ…"
-                        ) : (
-                            <>
-                                ยืนยันที่อยู่และสั่งซื้อ ({money(grandTotal)}) <ArrowRightIcon />
-                            </>
                         )}
-                    </button>
 
-                    <button
-                        className="text-button"
-                        style={{ marginTop: 14, fontSize: 12 }}
-                        onClick={() => {
-                            setError("");
-                            setStage("cart");
-                        }}
-                    >
-                        ← ย้อนกลับสู่ตะกร้าสินค้า
-                    </button>
+                        {addressLoading ? (
+                            <p className="cart-status-text">กำลังโหลดข้อมูลที่อยู่…</p>
+                        ) : addressMode === "select" && addresses.length > 0 ? (
+                            <div className="saved-address-list">
+                                {addresses.map((addr) => (
+                                    <label
+                                        key={addr.id}
+                                        className={`saved-address-card ${selectedAddressId === addr.id ? "selected" : ""
+                                            }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="savedAddress"
+                                            checked={selectedAddressId === addr.id}
+                                            onChange={() => setSelectedAddressId(addr.id)}
+                                        />
+                                        <div>
+                                            <div className="saved-address-head">
+                                                <strong>{addr.recipientName}</strong>
+                                                <span>{addr.phone}</span>
+                                            </div>
+                                            <p>
+                                                {addr.addressLine}, {addr.district},{" "}
+                                                {addr.province} {addr.postalCode}
+                                            </p>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="address-grid">
+                                <input
+                                    placeholder="ชื่อ-นามสกุลผู้รับ (อย่างน้อย 2 ตัวอักษร)"
+                                    value={newAddress.recipientName}
+                                    onChange={(e) =>
+                                        setNewAddress({
+                                            ...newAddress,
+                                            recipientName: e.target.value,
+                                        })
+                                    }
+                                />
+                                <input
+                                    placeholder="เบอร์โทรศัพท์ 10 หลัก (เช่น 0812345678)"
+                                    maxLength={10}
+                                    value={newAddress.phone}
+                                    onChange={(e) =>
+                                        setNewAddress({ ...newAddress, phone: e.target.value })
+                                    }
+                                />
+                                <input
+                                    className="wide"
+                                    placeholder="บ้านเลขที่ ซอย ถนน แขวง/ตำบล (อย่างน้อย 5 ตัวอักษร)"
+                                    value={newAddress.addressLine}
+                                    onChange={(e) =>
+                                        setNewAddress({
+                                            ...newAddress,
+                                            addressLine: e.target.value,
+                                        })
+                                    }
+                                />
+                                <input
+                                    placeholder="เขต / อำเภอ"
+                                    value={newAddress.district}
+                                    onChange={(e) =>
+                                        setNewAddress({
+                                            ...newAddress,
+                                            district: e.target.value,
+                                        })
+                                    }
+                                />
+                                <input
+                                    placeholder="จังหวัด"
+                                    value={newAddress.province}
+                                    onChange={(e) =>
+                                        setNewAddress({
+                                            ...newAddress,
+                                            province: e.target.value,
+                                        })
+                                    }
+                                />
+                                <input
+                                    className="wide"
+                                    placeholder="รหัสไปรษณีย์ 5 หลัก (เช่น 10110)"
+                                    maxLength={5}
+                                    value={newAddress.postalCode}
+                                    onChange={(e) =>
+                                        setNewAddress({
+                                            ...newAddress,
+                                            postalCode: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                        )}
+
+                        <div className="shipping-methods-box">
+                            <p className="field-label" style={{ marginBottom: 10 }}>
+                                รูปแบบการจัดส่ง (SHIPPING METHOD)
+                            </p>
+                            <label
+                                className={`shipping-option ${shippingMethod === "STANDARD" ? "selected" : ""
+                                    }`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="shippingMethod"
+                                    checked={shippingMethod === "STANDARD"}
+                                    onChange={() => setShippingMethod("STANDARD")}
+                                />
+                                <div>
+                                    <span>STANDARD</span>
+                                    <strong>
+                                        จัดส่งมาตรฐาน 2–4 วันทำการ (ครบ ฿500 ส่งฟรี)
+                                    </strong>
+                                </div>
+                                <b>
+                                    {selectedSubtotal >= FREE_SHIPPING_THRESHOLD
+                                        ? "ฟรี (฿0)"
+                                        : "฿40"}
+                                </b>
+                            </label>
+
+                            <label
+                                className={`shipping-option ${shippingMethod === "EXPRESS" ? "selected" : ""
+                                    }`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="shippingMethod"
+                                    checked={shippingMethod === "EXPRESS"}
+                                    onChange={() => setShippingMethod("EXPRESS")}
+                                />
+                                <div>
+                                    <span>EXPRESS</span>
+                                    <strong>จัดส่งด่วนพิเศษ 1–2 วันทำการ</strong>
+                                </div>
+                                <b>฿100</b>
+                            </label>
+                        </div>
+
+                        {error && (
+                            <div className="login-error" style={{ marginBottom: 12 }}>
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            id="go-payment-btn"
+                            className="solid-button full"
+                            onClick={handleCheckout}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                "กำลังดำเนินการสั่งซื้อ…"
+                            ) : (
+                                <>
+                                    ยืนยันที่อยู่และสั่งซื้อ ({money(grandTotal)}){" "}
+                                    <ArrowRightIcon />
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Column 3: รายการสินค้าที่สั่งซื้อ */}
+                    {renderOrderedItemsSidebar(
+                        selectedLines,
+                        selectedSubtotal,
+                        shippingFee,
+                        grandTotal,
+                        shippingMethod
+                    )}
                 </div>
             </div>
         );

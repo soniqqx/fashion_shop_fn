@@ -1309,3 +1309,227 @@ td small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ============================================================
+   CHECKOUT STEPPER, 3-COLUMN LAYOUT & ORDERED ITEMS SIDEBAR
+   ============================================================ */
+.checkout-columns {
+  display: grid;
+  grid-template-columns: 220px 1fr 380px;
+  gap: 36px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 4vw 80px;
+  align-items: start;
+}
+.checkout-back-col {
+  position: sticky;
+  top: 32px;
+}
+.checkout-main-col {
+  min-width: 0;
+}
+.checkout-main-col h1 {
+  font: 500 clamp(30px, 3.5vw, 44px) / 1.05 'Playfair Display', serif;
+  letter-spacing: -1.5px;
+  margin: 0 0 24px;
+}
+.checkout-order-sidebar {
+  background: #f3f1ec;
+  border: 1px solid var(--line);
+  padding: 28px 24px;
+  position: sticky;
+  top: 32px;
+}
+.checkout-order-sidebar h2 {
+  font: 500 20px 'Playfair Display', serif;
+  margin: 0 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.checkout-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 380px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+.checkout-item-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.checkout-item-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.checkout-item-swatch {
+  height: 68px;
+  border-radius: 2px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 4px;
+}
+.checkout-item-swatch span {
+  font: 9px 'DM Mono', monospace;
+  background: rgba(255,255,255,.88);
+  color: var(--ink);
+  padding: 1px 4px;
+}
+.checkout-item-info strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+.checkout-item-info p {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.checkout-item-info small {
+  font: 11px 'DM Mono', monospace;
+  color: var(--ink);
+}
+.checkout-item-subtotal {
+  font: 700 12px 'DM Mono', monospace;
+  text-align: right;
+  white-space: nowrap;
+}
+.checkout-sidebar-summary {
+  border-top: 1px solid var(--ink);
+  padding-top: 16px;
+}
+.success-wrap {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+.checkout-top-header {
+  margin-bottom: 30px;
+}
+.back-to-cart-top-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  white-space: nowrap;
+  transition: border-color .15s, background .15s;
+}
+.back-to-cart-top-btn:hover {
+  border-color: var(--ink);
+  background: #f3f1ec;
+}
+.checkout-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f3f1ec;
+  border: 1px solid var(--line);
+  padding: 18px 22px;
+  gap: 12px;
+}
+.stepper-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.stepper-item:last-child {
+  flex: 0 0 auto;
+}
+.stepper-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font: 700 12px 'DM Mono', monospace;
+  flex-shrink: 0;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.stepper-circle svg {
+  width: 15px;
+}
+.stepper-item.active .stepper-circle {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.stepper-item.completed .stepper-circle {
+  background: var(--lime);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.stepper-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stepper-label span {
+  font: 10px 'DM Mono', monospace;
+  color: var(--muted);
+  letter-spacing: .5px;
+}
+.stepper-label strong {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.stepper-item.active .stepper-label strong,
+.stepper-item.completed .stepper-label strong {
+  color: var(--ink);
+}
+.stepper-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  margin: 0 6px;
+  min-width: 16px;
+}
+.stepper-line.completed {
+  background: var(--ink);
+}
+@media (max-width: 1100px) {
+  .checkout-columns {
+    grid-template-columns: 1fr 340px;
+  }
+  .checkout-back-col {
+    grid-column: 1 / -1;
+    position: static;
+  }
+}
+@media (max-width: 820px) {
+  .checkout-columns {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .checkout-order-sidebar {
+    position: static;
+  }
+}
+@media (max-width: 600px) {
+  .checkout-stepper {
+    padding: 14px;
+    gap: 8px;
+  }
+  .stepper-label strong {
+    font-size: 11px;
+  }
+  .stepper-line {
+    display: none;
+  }
+}
