@@ -106,6 +106,7 @@ export default function CartPage() {
 
     useEffect(() => {
         setSelectedIds((prev) => {
+            //หา variants ที่ยังไม่ out of stock or unavailable
             const validIds = cart
                 .filter((line) => !isLineUnavailable(line))
                 .map((line) => line.id);
@@ -115,6 +116,7 @@ export default function CartPage() {
         });
     }, [cart]);
 
+    //for address stage
     useEffect(() => {
         if (stage !== "address") return;
         async function fetchAddresses() {
